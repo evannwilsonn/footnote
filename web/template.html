@@ -7,232 +7,290 @@
 <meta name="description" content="A retrieval-augmented question-answering system in Go with Postgres pgvector and local models, evaluated on SQuAD 2.0.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cutive+Mono&family=Libre+Bodoni:ital,wght@0,400;0,600;1,400&family=Public+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,400;0,600;0,700;1,400&family=Martian+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <style>
 :root{
-  --desk:#e7e4dc;--paper:#fbfaf6;--ink:#1d1c1a;--soft:#46443f;--faint:#6a675f;--rule:#d9d5ca;
-  --margin:#c4361f;--margin-ink:#a82c17;--sticker:#bfe6cf;--sticker-ink:#123d29;--mark:#fdf0b6;--mark-ink:#1d1c1a;
-  --c-lex:#c4361f;--c-dense:#1b7f5f;--c-hyb:#4251b8;
-  --serif:"Libre Bodoni",Georgia,serif;--sans:"Public Sans",system-ui,sans-serif;--mono:"Cutive Mono","Courier New",monospace;
-  --line:30px;
+  --housing:#d8d5e2;--housing-lo:#c6c1d6;--screen:#f7f5fc;--ink:#1d1838;--violet:#3d2a9e;--soft:#46415f;--faint:#5e5979;--rule:#d9d4ea;
+  --lamp:#e08a1e;--lamp-ink:#8a4c00;--film:#1d1934;--film-ink:#ebe7ff;--film-soft:#b5aed6;--hi:#ffe2a8;--hi-ink:#1d1838;
+  --ok:#1d6b45;--no:#a3321c;
+  --c-lex:#b0600c;--c-dense:#5a3ccf;--c-hyb:#007c99;--bar-mem:#b9b4cc;
+  --display:"Syne",system-ui,sans-serif;--sans:"Figtree",system-ui,sans-serif;--mono:"Martian Mono",ui-monospace,monospace;
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --desk:#0f1013;--paper:#15161a;--ink:#ecebe6;--soft:#c9c7bf;--faint:#a3a097;--rule:#2b2c31;
-  --margin:#e0573d;--margin-ink:#f07a62;--sticker:#1f4a36;--sticker-ink:#cdf0dc;--mark:#5a4c12;--mark-ink:#fff6d6;
-  --c-lex:#e0573d;--c-dense:#2ea57c;--c-hyb:#7683ea;color-scheme:dark}}
+  --housing:#0e0c17;--housing-lo:#171426;--screen:#1b1830;--ink:#ece9ff;--violet:#b7a8ff;--soft:#c3bedc;--faint:#a29cc0;--rule:#2f2a4a;
+  --lamp:#f2a54a;--lamp-ink:#f6b866;--film:#07060e;--film-ink:#dcd6ff;--film-soft:#9a93bd;--hi:#5b3f0b;--hi-ink:#fff0d0;
+  --ok:#6fd3a0;--no:#ff8f78;
+  --c-lex:#cf7f2a;--c-dense:#9077ee;--c-hyb:#1fa6b4;--bar-mem:#4a4566;color-scheme:dark;
+}}
 :root[data-theme="dark"]{
-  --desk:#0f1013;--paper:#15161a;--ink:#ecebe6;--soft:#c9c7bf;--faint:#a3a097;--rule:#2b2c31;
-  --margin:#e0573d;--margin-ink:#f07a62;--sticker:#1f4a36;--sticker-ink:#cdf0dc;--mark:#5a4c12;--mark-ink:#fff6d6;
-  --c-lex:#e0573d;--c-dense:#2ea57c;--c-hyb:#7683ea;color-scheme:dark}
-
+  --housing:#0e0c17;--housing-lo:#171426;--screen:#1b1830;--ink:#ece9ff;--violet:#b7a8ff;--soft:#c3bedc;--faint:#a29cc0;--rule:#2f2a4a;
+  --lamp:#f2a54a;--lamp-ink:#f6b866;--film:#07060e;--film-ink:#dcd6ff;--film-soft:#9a93bd;--hi:#5b3f0b;--hi-ink:#fff0d0;
+  --ok:#6fd3a0;--no:#ff8f78;
+  --c-lex:#cf7f2a;--c-dense:#9077ee;--c-hyb:#1fa6b4;--bar-mem:#4a4566;color-scheme:dark;
+}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--desk);color:var(--ink);font:400 16px/1.6 var(--sans)}
+body{margin:0;background:var(--housing);color:var(--ink);font:400 16px/1.6 var(--sans)}
 a{color:inherit;text-underline-offset:3px}
-:focus-visible{outline:2px solid var(--margin);outline-offset:3px}
-.sheet{max-width:1080px;margin:28px auto 40px;background:var(--paper);position:relative;padding:44px 56px 64px 112px}
-/* Pleading paper: a double rule down the left margin and one on the right */
-.sheet::before{content:"";position:absolute;top:0;bottom:0;left:84px;width:5px;border-left:1.5px solid var(--margin);border-right:1.5px solid var(--margin);pointer-events:none}
-.sheet::after{content:"";position:absolute;top:0;bottom:0;right:28px;border-left:1.5px solid var(--margin);pointer-events:none}
-.top{display:flex;justify-content:space-between;align-items:center;gap:16px;font:400 14px var(--mono);color:var(--faint);margin-bottom:28px;flex-wrap:wrap}
-.top nav{display:flex;gap:18px}
-.top a,.top button{background:none;border:0;padding:2px 0;font:inherit;color:inherit;cursor:pointer;text-decoration:none;border-bottom:1px solid currentColor}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--lamp);outline-offset:3px}
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px}
 
-/* Caption block, as on a court filing */
-.caption{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);border-top:1.5px solid var(--ink);border-bottom:1.5px solid var(--ink)}
-.caption > div{padding:16px 18px}
-.caption > div:first-child{border-right:1.5px solid var(--ink)}
-.caption .party{font:400 15px/1.5 var(--mono)}
-.caption .party b{display:block;font-weight:400;font-size:17px;margin-top:4px}
-.caption .no{font:400 15px/1.6 var(--mono)}
-h1{font:400 clamp(40px,6vw,74px)/1 var(--serif);text-align:center;margin:38px 0 6px;letter-spacing:.01em}
-h1 i{color:var(--margin-ink)}
-.sub{text-align:center;font:400 15px var(--mono);color:var(--faint);margin:0 0 30px}
-.lede{max-width:44em;margin:0 auto 40px;color:var(--soft);font-size:17px;text-wrap:pretty}
+/* Nameplate */
+.plate{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 0;border-bottom:1px solid var(--housing-lo)}
+.brand{display:flex;align-items:center;gap:14px}
+.brand b{font:800 22px/1 var(--display);color:var(--violet)}
+.brand span{font:400 11px/1.4 var(--mono);color:var(--faint);text-transform:uppercase;letter-spacing:.08em}
+.plate nav{display:flex;align-items:center;gap:18px;font-size:14px}
+.lamp{display:inline-flex;align-items:center;gap:8px;background:none;border:1px solid var(--faint);border-radius:999px;padding:5px 12px 5px 9px;cursor:pointer;font-size:14px}
+.lamp i{width:10px;height:10px;border-radius:50%;background:var(--lamp);border:2px solid var(--screen)}
 
-/* The transcript */
-.hearing{position:relative;display:grid;grid-template-columns:260px minmax(0,1fr);gap:32px;align-items:start}
-.docket h2{font:600 13px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin:0 0 8px}
-.docket ol{list-style:none;margin:0 0 18px;padding:0;border-top:1px solid var(--rule)}
-.docket li button{display:grid;grid-template-columns:28px minmax(0,1fr);gap:6px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--rule);padding:8px 2px;font:400 14px/1.35 var(--sans);color:var(--ink);cursor:pointer}
-.docket li button:hover{background:color-mix(in srgb,var(--sticker) 40%,transparent)}
-.docket li button[aria-current="true"]{background:var(--sticker);color:var(--sticker-ink)}
-.docket li button span:first-child{font:400 13px var(--mono);color:var(--faint)}
-.docket li button[aria-current="true"] span:first-child{color:var(--sticker-ink)}
-.live{border:1.5px solid var(--ink);padding:12px;margin-bottom:18px}
-.live label{display:block;font:600 13px var(--sans);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px}
-.live input{width:100%;font:400 16px var(--mono);padding:8px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)}
-.live p{margin:6px 0 0;font-size:13px;color:var(--faint)}
+/* Opening */
+.open{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:48px;align-items:end;padding:56px 0 36px}
+h1{font:800 clamp(38px,4.8vw,62px)/1.02 var(--display);margin:0;color:var(--ink);text-wrap:balance}
+h1 em{font-style:normal;color:var(--violet)}
+.lede{margin:0;font-size:18px;color:var(--soft);text-wrap:pretty}
+.header-strip{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px 22px;background:var(--film);color:var(--film-ink);font:400 12px/1.5 var(--mono);text-transform:uppercase;letter-spacing:.06em;padding:10px 16px;border-radius:4px}
+.header-strip b{font-weight:500;color:var(--lamp)}
 
-.transcript{position:relative;font:400 18px/var(--line) var(--mono)}
-.numbers{position:absolute;left:-112px;top:0;width:60px;text-align:right;font:400 14px/var(--line) var(--mono);color:var(--faint);user-select:none}
-.qa{display:grid;grid-template-columns:44px minmax(0,1fr);margin:0}
-.qa dt{font-weight:400}
-.qa dd{margin:0 0 var(--line)}
-.qa .who{font:400 13px/var(--line) var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
-.qa .ans b{font-weight:400;background:var(--mark);color:var(--mark-ink);padding:1px 2px}
-.qa .ans.wrong b{background:none;text-decoration:line-through;text-decoration-color:var(--margin);text-decoration-thickness:2px}
-.cite{font:600 12.5px var(--sans);background:var(--sticker);color:var(--sticker-ink);padding:2px 6px;border-radius:2px;margin-left:6px;vertical-align:2px;white-space:nowrap}
-.ruling{font:400 14px/1.5 var(--sans);color:var(--soft);border-top:1px solid var(--rule);padding-top:8px;margin:0 0 26px}
+/* Reader: the fiche and the screen */
+.reader{display:grid;grid-template-columns:420px minmax(0,1fr);gap:28px;align-items:start;padding-bottom:72px}
+.fiche{background:var(--film);color:var(--film-ink);border-radius:6px;padding:14px 14px 16px;position:sticky;top:16px}
+.fiche h2{font:500 11px/1.4 var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--film-soft);margin:2px 2px 12px;display:flex;justify-content:space-between;gap:10px}
+.grid{display:grid;grid-template-columns:18px repeat(4,minmax(0,1fr));gap:6px}
+.grid .ax{font:500 11px/1 var(--mono);color:var(--film-soft);display:flex;align-items:center;justify-content:center}
+.frame{appearance:none;border:1px solid color-mix(in srgb,var(--film-ink) 22%,transparent);background:color-mix(in srgb,var(--film-ink) 6%,transparent);border-radius:3px;padding:7px 7px 8px;text-align:left;cursor:pointer;min-height:118px;display:flex;flex-direction:column;gap:6px;transition:background .15s,border-color .15s}
+.frame:hover{background:color-mix(in srgb,var(--film-ink) 13%,transparent)}
+.frame[aria-pressed="true"]{background:var(--screen);color:var(--ink);border-color:var(--lamp);outline:2px solid var(--lamp);outline-offset:1px}
+.frame .co{display:flex;justify-content:space-between;align-items:center;font:500 10.5px/1 var(--mono)}
+.frame .q{font-size:12.5px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
+.mark{font:500 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.05em;padding:3px 5px;border-radius:2px}
+.mark.sym{font-size:12px;width:20px;text-align:center;padding:3px 0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.mark.right{background:#2c6e4f;color:#e9fff3}
+.mark.declined{background:#4d4579;color:#efeaff}
+.mark.wrong{background:#9b3420;color:#fff0ec}
+.key{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 2px 0;font-size:12.5px;color:var(--film-soft)}
+.key span{display:inline-flex;align-items:center;gap:6px}
+.live{margin:0 0 14px;padding:12px;border-radius:4px;background:color-mix(in srgb,var(--lamp) 16%,transparent)}
+.live label{display:block;font:500 11px/1.4 var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--lamp);margin-bottom:6px}
+.live input{width:100%;font:400 15px var(--sans);padding:9px 10px;border-radius:3px;border:1px solid var(--film-soft);background:var(--film);color:var(--film-ink)}
+.live p{margin:6px 0 0;font-size:12.5px;color:var(--film-soft)}
+
+.screen{background:var(--screen);border-radius:10px;padding:34px 38px 38px;position:relative;box-shadow:0 1px 0 var(--housing-lo),0 24px 48px -32px rgba(29,24,56,.45)}
+.screen::before,.screen::after{content:"";position:absolute;width:18px;height:18px;border:2px solid var(--violet);opacity:.55;pointer-events:none}
+.screen::before{top:12px;left:12px;border-right:0;border-bottom:0}
+.screen::after{bottom:12px;right:12px;border-left:0;border-top:0}
+.proj{font:400 11px/1.4 var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin:0 0 14px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.proj b{color:var(--lamp-ink);font-weight:500}
+.screen h2{font:700 clamp(22px,2.6vw,30px)/1.2 var(--sans);margin:0 0 24px;text-wrap:balance}
+.answers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.answers.solo{grid-template-columns:minmax(0,1fr)}
+.ans{border:1px solid var(--rule);border-radius:6px;padding:14px 16px}
+.ans .who{font:500 11px/1.4 var(--mono);text-transform:uppercase;letter-spacing:.07em;color:var(--faint);margin:0 0 6px}
+.ans .say{font:700 21px/1.3 var(--sans);margin:0}
+.ans .say.off{text-decoration:line-through;text-decoration-color:var(--no);text-decoration-thickness:2px;color:var(--soft)}
+.ans .say.idk{font-weight:400;font-style:italic;color:var(--soft)}
+.ans .tag{display:inline-block;margin-top:8px;font:500 12px/1 var(--sans);padding:4px 7px;border-radius:3px;background:color-mix(in srgb,var(--violet) 14%,transparent);color:var(--violet)}
+.ans.with{border-color:var(--violet);border-width:1.5px}
+.ruling{margin:18px 0 0;font-size:16px;color:var(--soft)}
 .ruling b{color:var(--ink)}
-.exhibits{display:grid;gap:16px}
-.exhibit{border:1px solid var(--rule);padding:16px 18px 14px;position:relative;font:400 15px/1.6 var(--sans);color:var(--soft)}
-.exhibit .stk{position:absolute;top:-11px;left:14px;background:var(--sticker);color:var(--sticker-ink);font:600 12px/1 var(--sans);letter-spacing:.08em;text-transform:uppercase;padding:5px 8px 4px;border-radius:2px}
-.exhibit .from{font:400 13px var(--mono);color:var(--faint);margin:2px 0 6px}
-.exhibit .from b{font-weight:400;color:var(--ink)}
-.exhibit.gold{border-color:var(--ink);border-width:1.5px;color:var(--ink)}
-.exhibit mark{background:var(--mark);color:var(--mark-ink);padding:0 2px}
-.exhibit .clip{max-height:9.6em;overflow:hidden}
-.exhibit.open .clip{max-height:none}
-.exhibit button{background:none;border:0;padding:4px 0 0;font:600 13px var(--sans);color:var(--faint);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.passages{margin-top:28px;display:grid;gap:14px}
+.passage{border-top:1px solid var(--rule);padding-top:12px}
+.passage .ph{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+.passage .n{font:500 12px/1 var(--mono);color:var(--violet);background:color-mix(in srgb,var(--violet) 12%,transparent);padding:4px 6px;border-radius:2px}
+.passage .src{font-size:14px;color:var(--faint)}
+.passage .src b{color:var(--soft);font-weight:600}
+.passage .gold{font:600 12.5px var(--sans);color:var(--lamp-ink)}
+.passage .clip{font-size:15.5px;line-height:1.6;max-height:6.4em;overflow:hidden;position:relative;margin:0}
+.passage.full .clip{max-height:none}
+.passage .clip mark{background:var(--hi);color:var(--hi-ink);padding:0 2px;border-radius:2px}
+.more{background:none;border:0;padding:4px 0;margin-top:2px;font-size:14px;color:var(--violet);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 
-/* Findings */
-section{margin-top:76px}
-.head{border-bottom:1.5px solid var(--ink);padding-bottom:8px;margin-bottom:22px;display:flex;justify-content:space-between;align-items:baseline;gap:18px;flex-wrap:wrap}
-.head h2{font:400 clamp(32px,4.2vw,48px)/1 var(--serif);margin:0}
-.head h2 i{color:var(--margin-ink)}
-.head p{margin:0;max-width:30em;color:var(--soft);font-size:15px;text-wrap:pretty}
-.finding{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:36px;align-items:start;margin-bottom:40px}
-.finding h3{font:600 17px var(--sans);margin:0 0 8px}
-.finding p{margin:0 0 12px;color:var(--soft);text-wrap:pretty}
-.legend{display:flex;gap:16px;flex-wrap:wrap;font:400 13px var(--sans);color:var(--soft);margin:0 0 6px}
-.legend span{display:inline-flex;gap:7px;align-items:center}
+/* Index of findings */
+.findings{background:var(--screen);border-radius:10px;padding:48px 44px 56px;margin-bottom:28px}
+.findings > header{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:40px;align-items:end;border-bottom:2px solid var(--ink);padding-bottom:18px;margin-bottom:8px}
+.findings h2{font:800 clamp(32px,4.4vw,52px)/1 var(--display);margin:0;color:var(--violet)}
+.findings > header p{margin:0;color:var(--soft)}
+.entry{display:grid;grid-template-columns:150px minmax(0,1fr);gap:28px;padding:34px 0;border-bottom:1px solid var(--rule)}
+.entry:last-child{border-bottom:0;padding-bottom:0}
+.entry .co{font:500 12px/1.5 var(--mono);text-transform:uppercase;letter-spacing:.07em;color:var(--faint)}
+.entry .co b{display:block;font:800 34px/1 var(--display);color:var(--lamp);letter-spacing:0;margin-bottom:6px}
+.entry h3{font:700 22px/1.25 var(--sans);margin:0 0 14px}
+.split{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:32px;align-items:start}
+.split p{margin:0 0 12px;color:var(--soft);text-wrap:pretty}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13.5px;color:var(--soft);margin-bottom:6px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
 .chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart text{font:400 11.5px var(--sans);fill:var(--faint)}
+.chart .lbl{font:600 12px var(--sans)}
 .chart .grid line{stroke:var(--rule)}
-.chart text{font:400 13px var(--sans);fill:var(--faint)}
-.chart .lbl{font-weight:600;font-size:13.5px}
 .chart .hit{fill:transparent;cursor:crosshair}
-.tip{position:fixed;z-index:20;pointer-events:none;background:var(--ink);color:var(--paper);font:400 13px/1.45 var(--sans);padding:8px 10px;max-width:280px;opacity:0;transition:opacity .12s;white-space:pre-line}
-table{border-collapse:collapse;width:100%;font:400 14px var(--sans)}
-th{text-align:right;font:600 12px var(--sans);letter-spacing:.05em;text-transform:uppercase;color:var(--faint);padding:6px 8px;border-bottom:1.5px solid var(--ink)}
-td{text-align:right;padding:7px 8px;border-bottom:1px solid var(--rule);font-variant-numeric:tabular-nums}
-th:first-child,td:first-child{text-align:left}
-tr.chosen td{font-weight:700}
-.verdicts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-top:8px}
-.verdict{border:1.5px solid var(--ink);padding:14px 16px}
-.verdict .k{font:600 12px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
-.verdict .pair{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;align-items:baseline;margin-top:8px}
-.verdict .v{font:400 34px/1.1 var(--serif)}
-.verdict .v.rag{color:var(--margin-ink)}
-.verdict .l{font-size:13.5px;color:var(--soft)}
-.objections{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px}
-.objections h3{font:400 24px/1.1 var(--serif);margin:0 0 8px}
-.objections h3 i{color:var(--margin-ink)}
-.objections p{margin:0;color:var(--soft);text-wrap:pretty;font-size:15px}
-pre{background:var(--desk);color:var(--ink);font:400 13px/1.5 var(--mono);padding:10px 12px;overflow-x:auto;margin:8px 0 0}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+th{font:500 11px/1.3 var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--faint);text-align:right;padding:6px 10px;border-bottom:1.5px solid var(--ink);vertical-align:bottom}
+th:first-child,td:first-child{text-align:left;padding-left:0}
+td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--rule);font-variant-numeric:tabular-nums}
+tr.chosen td{font-weight:700;background:color-mix(in srgb,var(--lamp) 14%,transparent)}
+.bars{display:grid;gap:18px}
+.bar h4{margin:0 0 6px;font:600 15px var(--sans)}
+.bar .row{display:grid;grid-template-columns:120px minmax(0,1fr) 64px;align-items:center;gap:10px;font-size:13.5px;color:var(--soft);margin:3px 0}
+.bar .track{height:14px;background:color-mix(in srgb,var(--rule) 60%,transparent);border-radius:0 4px 4px 0;position:relative}
+.bar .fill{position:absolute;inset:0 auto 0 0;border-radius:0 4px 4px 0}
+.bar .v{text-align:right;font:500 13px var(--mono);color:var(--ink)}
+.limits{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
+.limits h4{font:700 17px/1.3 var(--sans);margin:0 0 6px}
+.limits p{margin:0;font-size:15px;color:var(--soft);text-wrap:pretty}
+pre{background:var(--film);color:var(--film-ink);font:400 12.5px/1.65 var(--mono);padding:14px 16px;border-radius:4px;overflow-x:auto;margin:10px 0 0}
 details{margin-top:28px}
-summary{cursor:pointer;font:600 14px var(--sans);color:var(--soft)}
-.tablewrap{overflow-x:auto;margin-top:8px}
-footer{margin-top:72px;border-top:1.5px solid var(--ink);padding-top:14px;font-size:14px;color:var(--soft);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:32px}
-footer p{margin:0 0 6px}
+summary{cursor:pointer;font-weight:600}
+.tip{position:fixed;z-index:20;pointer-events:none;background:var(--film);color:var(--film-ink);font:400 13px/1.45 var(--sans);padding:8px 10px;border-radius:4px;max-width:280px;opacity:0;transition:opacity .12s;white-space:pre-line}
 
-@media (max-width:900px){
-  .sheet{padding:30px 22px 48px 64px}
-  .sheet::before{left:44px}
-  .sheet::after{display:none}
-  .numbers{left:-64px;width:34px;font-size:12px}
-  .hearing,.finding{grid-template-columns:minmax(0,1fr);gap:24px}
-  .objections,.verdicts{grid-template-columns:minmax(0,1fr)}
-  .caption{grid-template-columns:minmax(0,1fr)}
-  .caption > div:first-child{border-right:0;border-bottom:1.5px solid var(--ink)}
-  footer{grid-template-columns:minmax(0,1fr)}
+footer{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:32px;padding:24px 0 48px;font-size:14px;color:var(--faint)}
+footer p{margin:0 0 6px}
+footer b{color:var(--ink)}
+
+@media (max-width:980px){
+  .reader{grid-template-columns:minmax(0,1fr)}
+  .fiche{position:static}
+  .open{grid-template-columns:minmax(0,1fr);gap:20px;padding-top:36px}
+  .entry{grid-template-columns:minmax(0,1fr);gap:10px}
+  .entry .co b{display:inline;margin-right:10px;font-size:24px}
+  .split,.findings > header,.limits,footer{grid-template-columns:minmax(0,1fr)}
 }
-@media (max-width:520px){
-  .sheet{margin:0;padding:24px 16px 40px 46px}
-  .sheet::before{left:30px;width:4px}
-  .numbers{left:-46px;width:22px;font-size:11px}
-  .transcript{font-size:16px}
-  .qa{grid-template-columns:34px minmax(0,1fr)}
+@media (max-width:560px){
+  .wrap{padding:0 16px}
+  .plate .brand span{display:none}
+  .screen{padding:26px 18px 24px}
+  .findings{padding:30px 18px 34px}
+  .answers{grid-template-columns:minmax(0,1fr)}
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .grid .ax{display:none}
+  .frame{min-height:0}
+  .bar .row{grid-template-columns:96px minmax(0,1fr) 56px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
-<article class="sheet">
-  <div class="top">
-    <span>FOOTNOTE · No. 10 · Go · Postgres pgvector · Ollama</span>
-    <nav><a href="https://github.com/evannwilsonn/footnote">source</a><button type="button" id="theme">lights off</button></nav>
-  </div>
+<div class="wrap">
+  <header class="plate">
+    <div class="brand"><b>Footnote</b><span>Reader 10 · Go · Postgres pgvector · Ollama</span></div>
+    <nav><a href="https://github.com/evannwilsonn/footnote">Source</a><button type="button" class="lamp" id="theme"><i></i><span>Lamp off</span></button></nav>
+  </header>
 
-  <div class="caption">
-    <div class="party">IN THE MATTER OF<b id="capDocs">35 Wikipedia articles</b>and <span id="capQs">11,873</span> questions about them</div>
-    <div class="no">Case No. 10<br>Questions put to a 1.5-billion-parameter model,<br>with and without exhibits</div>
-  </div>
-
-  <h1>Answer <i>from the record.</i></h1>
-  <p class="sub">TRANSCRIPT OF PROCEEDINGS</p>
-  <p class="lede" id="lede">A question goes in. Footnote searches the documents, stored in Postgres with both full-text and vector indexes, hands the best passages to a small model running locally as numbered exhibits, and asks for the shortest answer it can cite, or "I don't know" when the exhibits don't say. Pick a question on the left to read the record.</p>
-
-  <div class="hearing">
-    <aside class="docket">
-      <div class="live" id="live" hidden>
-        <label for="ask">Ask a question</label>
-        <input id="ask" type="text" placeholder="Who ruled Normandy in the 10th century?" autocomplete="off">
-        <p id="liveStatus">Answered by the Footnote server you're connected to.</p>
-      </div>
-      <div id="docket"></div>
-    </aside>
-    <div>
-      <div class="transcript" id="transcript" aria-live="polite"></div>
-    </div>
-  </div>
-
-  <section aria-labelledby="h-find">
-    <div class="head">
-      <h2 id="h-find">Findings of <i>fact</i></h2>
-      <p>Choices were made on questions about 10 articles; the numbers below are from the other 25, which weren't looked at until the end.</p>
-    </div>
-
-    <div class="finding">
-      <div>
-        <h3>Finding the right passage</h3>
-        <div class="legend" aria-hidden="true">
-          <span><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="var(--c-lex)" stroke-width="2"/><rect x="9" y="1" width="8" height="8" fill="var(--c-lex)"/></svg>word search (Postgres full text)</span>
-          <span><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="var(--c-dense)" stroke-width="2"/><circle cx="13" cy="5" r="4" fill="var(--c-dense)"/></svg>meaning search (pgvector)</span>
-          <span><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="var(--c-hyb)" stroke-width="2.5"/><path d="M13 0L18 5L13 10L8 5Z" fill="var(--c-hyb)"/></svg>both, fused</span>
-        </div>
-        <div class="chart" id="recallChart"></div>
-      </div>
-      <div><p id="recallText"></p><p id="prefixText"></p></div>
-    </div>
-
-    <div class="finding">
-      <div>
-        <h3>How to cut the documents</h3>
-        <div class="tablewrap"><table id="chunkTable"></table></div>
-      </div>
-      <div><p id="chunkText"></p></div>
-    </div>
-
-    <h3 style="font:600 17px var(--sans);margin:0 0 4px">Answers, with and without exhibits</h3>
-    <p style="margin:0 0 10px;color:var(--soft)" id="answerIntro"></p>
-    <div class="verdicts" id="verdicts"></div>
-    <p style="color:var(--soft);margin:16px 0 0" id="answerText"></p>
-
-    <div class="finding" style="margin-top:36px">
-      <div>
-        <h3>Declining before asking</h3>
-        <div class="tablewrap"><table id="gateTable"></table></div>
-      </div>
-      <div><p id="gateText"></p></div>
-    </div>
+  <section class="open">
+    <h1>Every answer, with its <em>frame number.</em></h1>
+    <p class="lede">Footnote answers questions from a set of documents and shows its work. It stores the documents in Postgres, finds the passages most likely to hold the answer by meaning, and gives a small local model the top few to read. The model has to name the passage it used, or say "I don't know".</p>
+    <div class="header-strip" id="strip"></div>
   </section>
 
-  <section aria-labelledby="h-obj">
-    <div class="head"><h2 id="h-obj"><i>Objections</i></h2><p>Where it still goes wrong, and what it isn't.</p></div>
-    <div class="objections" id="objections"></div>
-    <details>
-      <summary>Every retrieval number, both question sets</summary>
-      <div class="tablewrap"><table id="allTable"></table></div>
-    </details>
+  <section class="reader" aria-label="Example questions">
+    <div class="fiche">
+      <div class="live" id="live" hidden>
+        <label for="ask">Load your own question</label>
+        <input id="ask" type="text" placeholder="Who ruled Normandy in the 10th century?" autocomplete="off">
+        <p id="liveStatus">Answered by the Footnote server this page came from.</p>
+      </div>
+      <h2><span>Test questions</span><span id="ficheCount"></span></h2>
+      <div class="grid" id="grid"></div>
+      <div class="key">
+        <span><b class="mark right">✓ right</b> answered from the passages</span>
+        <span><b class="mark declined">– none</b> correctly said "I don't know"</span>
+        <span><b class="mark wrong">✗ wrong</b> got it wrong</span>
+      </div>
+    </div>
+    <div class="screen" id="screen" aria-live="polite"></div>
+  </section>
+
+  <section class="findings" aria-labelledby="h-find">
+    <header>
+      <h2 id="h-find">Findings</h2>
+      <p>Every choice was made on questions about 10 articles. The numbers below come from the other 25, which weren't looked at until the end.</p>
+    </header>
+
+    <div class="entry">
+      <div class="co"><b>01</b>Finding the passage</div>
+      <div>
+        <h3>Search by meaning beats search by words</h3>
+        <div class="split">
+          <div>
+            <div class="legend" aria-hidden="true">
+              <span><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="var(--c-lex)" stroke-width="2"/><rect x="9" y="1" width="8" height="8" fill="var(--c-lex)"/></svg>word search (Postgres full text)</span>
+              <span><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="var(--c-dense)" stroke-width="2"/><circle cx="13" cy="5" r="4" fill="var(--c-dense)"/></svg>meaning search (pgvector)</span>
+              <span><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="var(--c-hyb)" stroke-width="2"/><path d="M13 0L18 5L13 10L8 5Z" fill="var(--c-hyb)"/></svg>both, fused</span>
+            </div>
+            <div class="chart" id="recallChart"></div>
+          </div>
+          <div><p id="recallText"></p><p id="prefixText"></p></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="co"><b>02</b>Cutting the documents</div>
+      <div>
+        <h3>Paragraphs make the best pieces</h3>
+        <div class="split">
+          <div class="tablewrap"><table id="chunkTable"></table></div>
+          <div><p id="chunkText"></p></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="co"><b>03</b>Answering</div>
+      <div>
+        <h3>Reading the passages turns guesses into answers</h3>
+        <div class="split">
+          <div class="bars" id="bars"></div>
+          <div><p id="answerIntro"></p><p id="answerText"></p></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="co"><b>04</b>Declining</div>
+      <div>
+        <h3>Saying "I don't know" before asking only half works</h3>
+        <div class="split">
+          <div class="tablewrap"><table id="gateTable"></table></div>
+          <div><p id="gateText"></p></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="co"><b>05</b>Limits</div>
+      <div>
+        <h3>Where it still goes wrong</h3>
+        <div class="limits" id="limits"></div>
+        <details>
+          <summary>Every retrieval number, both question sets</summary>
+          <div class="tablewrap"><table id="allTable"></table></div>
+        </details>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="co"><b>06</b>Running it</div>
+      <div>
+        <h3>Three containers</h3>
+        <p style="margin:0;color:var(--soft)">Postgres with pgvector, Ollama with the two models, and the Go API. The API serves this page with a live question box.</p>
+        <pre>scripts/get-data.sh
+docker compose up -d db ollama && docker compose run --rm models
+docker compose run --rm ingest && docker compose up -d api
+curl -s localhost:8080/ask -d '{"question": "Who ruled Normandy?"}'</pre>
+      </div>
+    </div>
   </section>
 
   <footer>
     <div><p><b>Footnote</b>, project 10 of Evan Wilson's AI project run.</p><p><a href="https://github.com/evannwilsonn/footnote">github.com/evannwilsonn/footnote</a></p></div>
-    <div><p>Documents and questions from SQuAD 2.0 (Rajpurkar, Jia and Liang, 2018; CC BY-SA 4.0), built from Wikipedia. Embeddings by nomic-embed-text and answers by Qwen2.5 1.5B, both run locally through Ollama. Set in Libre Bodoni, Public Sans and Cutive Mono.</p></div>
+    <div><p>Documents and questions from SQuAD 2.0 (Rajpurkar, Jia and Liang, 2018; CC BY-SA 4.0), built from Wikipedia. Embeddings by nomic-embed-text and answers by Qwen2.5 1.5B, both run locally through Ollama. Set in Syne, Figtree and Martian Mono.</p></div>
   </footer>
-</article>
+</div>
 <div class="tip" id="tip" role="tooltip"></div>
 
 <script>
@@ -246,11 +304,13 @@ const $ = id => document.getElementById(id);
 const pct = (v, d = 0) => (v * 100).toFixed(d) + "%";
 const fmt = n => n.toLocaleString("en-US");
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const shipped = GATE.onTestRun.find(r => Math.abs(r.threshold - GATE.shipped) < 1e-3);
 
+/* Lamp: light and dark */
 (function(){
   const root = document.documentElement, btn = $("theme");
   const dark = () => root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-  const label = () => { btn.textContent = dark() ? "lights on" : "lights off"; };
+  const label = () => { btn.querySelector("span").textContent = dark() ? "Lamp on" : "Lamp off"; };
   try { const t = localStorage.getItem("footnote-theme"); if (t) root.dataset.theme = t; } catch (e) {}
   label();
   btn.addEventListener("click", () => {
@@ -260,24 +320,20 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;",
   });
 })();
 
-$("capDocs").textContent = `${INGEST.documents} Wikipedia articles`;
+$("strip").innerHTML = [
+  ["Source", "SQuAD 2.0 dev"],
+  ["Articles", INGEST.documents],
+  ["Paragraphs", fmt(INGEST.para.chunks)],
+  ["Questions", "11,873"],
+  ["Search", { lexical: "words", dense: "meaning", hybrid: "fused" }[CHOSEN.method]],
+  ["Passages read", CHOSEN.k],
+].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join("");
 
-/* Line numbers down the left margin, like pleading paper */
-function numberLines(){
-  // Numbered against the whole hearing (docket and transcript), so they sit in the sheet's left gutter.
-  const t = document.querySelector(".hearing");
-  let col = t.querySelector(":scope > .numbers");
-  if (!col) { col = document.createElement("div"); col.className = "numbers"; col.setAttribute("aria-hidden", "true"); t.prepend(col); }
-  col.innerHTML = "";
-  const n = Math.max(1, Math.floor(t.scrollHeight / 30));
-  col.innerHTML = Array.from({ length: n }, (_, i) => i + 1).join("<br>");
-}
-
-/* Highlight the gold answer inside an exhibit */
+/* Highlight the gold answer inside a passage */
 function marked(text, golds){
   let html = esc(text);
   const seen = new Set();
-  for (const g of golds || []) {
+  for (const g of [...golds].sort((a, b) => b.length - a.length)) {
     if (!g || seen.has(g)) continue;
     seen.add(g);
     const i = html.indexOf(esc(g));
@@ -286,44 +342,50 @@ function marked(text, golds){
   return html;
 }
 
-function render(ex){
+const coord = i => "ABCDEFGH"[Math.floor(i / 4)] + (i % 4 + 1);
+
+/* Project one question onto the screen */
+function render(ex, where, live){
   const golds = ex.gold || [];
   const rag = ex.rag, closed = ex.closed;
-  const answerLine = (a, label, withCites) => {
-    if (a.abstained) return `<dt class="who">A.</dt><dd><span class="who">${label}</span><br>I don't know.</dd>`;
-    const right = !ex.impossible && a.em === 1;
-    const near = !ex.impossible && a.f1 > 0 && a.em < 1;
-    const cites = withCites ? (a.cited || []).map(n => `<span class="cite">Ex. ${n}</span>`).join("") : "";
-    return `<dt class="who">A.</dt><dd><span class="who">${label}</span><br><span class="ans${right || near ? "" : " wrong"}"><b>${esc(a.answer)}</b></span>${cites}</dd>`;
+  const block = (a, label, cls, withCites) => {
+    if (a.abstained) return `<div class="ans ${cls}"><p class="who">${label}</p><p class="say idk">I don't know.</p></div>`;
+    const off = !live && (ex.impossible || (a.em < 1 && !(a.f1 > 0)));
+    const cites = withCites ? (a.cited || []).map(n => `<span class="tag">read in passage ${n}</span>`).join(" ") : "";
+    return `<div class="ans ${cls}"><p class="who">${label}</p><p class="say${off ? " off" : ""}">${esc(a.answer)}</p>${cites}</div>`;
   };
   let ruling;
-  if (ex.impossible) ruling = rag.abstained ? "The articles don't answer this one. With exhibits, the model <b>correctly declined</b>." : "The articles don't answer this one, but the model <b>answered anyway</b>. That's a confabulation.";
-  else if (rag.em === 1) ruling = `Gold answer: <b>${esc(golds[0])}</b>. With exhibits, an <b>exact match</b>${rag.retrieved ? "" : ", though no exhibit held the answer"}.`;
-  else if (rag.abstained) ruling = `Gold answer: <b>${esc(golds[0])}</b>. The model said it didn't know${rag.retrieved ? " even though an exhibit held the answer" : "; no exhibit held the answer"}.`;
-  else ruling = `Gold answer: <b>${esc(golds[0])}</b>. ${rag.f1 > 0 ? `Partly right (F1 ${rag.f1.toFixed(2)})` : "Wrong"}${rag.retrieved ? "" : "; no exhibit held the answer"}.`;
-  const exhibits = (rag.sources || []).map((s, i) => `<div class="exhibit${s.gold ? " gold" : ""}"><span class="stk">Exhibit ${i + 1}${s.gold ? " · holds the answer" : ""}</span><p class="from">from <b>${esc(s.title)}</b></p><div class="clip">${marked(s.text, s.gold ? golds : [])}</div>${s.text.length > 420 ? `<button type="button" class="more">Read the whole exhibit</button>` : ""}</div>`).join("");
-  $("transcript").innerHTML = `<dl class="qa"><dt>Q.</dt><dd>${esc(ex.question)}</dd>${answerLine(closed, "from memory, no exhibits", false)}${answerLine(rag, `with ${(rag.sources || []).length} exhibits`, true)}</dl><p class="ruling">${ruling}</p><div class="exhibits">${exhibits}</div>`;
-  $("transcript").querySelectorAll(".more").forEach(b => b.addEventListener("click", () => { b.parentElement.classList.add("open"); b.remove(); numberLines(); }));
-  numberLines();
+  if (live) ruling = `Answered live in ${(ex.ms / 1000).toFixed(1)} s. Your own question has no gold answer, so check the passages.`;
+  else if (ex.impossible) ruling = rag.abstained ? "The articles don't answer this one, and with the passages in hand the model <b>correctly declined</b>." : "The articles don't answer this one, but the model <b>answered anyway</b>.";
+  else if (rag.em === 1) ruling = `Gold answer: <b>${esc(golds[0])}</b>. With the passages, an <b>exact match</b>${rag.retrieved ? "" : ", though no passage held the answer"}.`;
+  else if (rag.abstained) ruling = `Gold answer: <b>${esc(golds[0])}</b>. The model said it didn't know${rag.retrieved ? " even though a passage held the answer" : "; no passage held the answer"}.`;
+  else ruling = `Gold answer: <b>${esc(golds[0])}</b>. ${rag.f1 > 0 ? `Partly right (F1 ${rag.f1.toFixed(2)})` : "Wrong"}${rag.retrieved ? "" : "; no passage held the answer"}.`;
+  const n = (rag.sources || []).length;
+  const passages = (rag.sources || []).map((s, i) => `<div class="passage"><div class="ph"><span class="n">Passage ${i + 1}</span><span class="src">from <b>${esc(s.title)}</b></span>${s.gold ? `<span class="gold">holds the answer</span>` : ""}</div><p class="clip">${marked(s.text, s.gold ? golds : [])}</p>${s.text.length > 300 ? `<button type="button" class="more">Show the whole passage</button>` : ""}</div>`).join("");
+  $("screen").innerHTML = `<p class="proj"><span>${where}</span><b>${live ? "live" : ex.doc ? esc(ex.doc) : ""}</b></p><h2>${esc(ex.question)}</h2><div class="answers${live ? " solo" : ""}">${live ? "" : block(closed, "From memory, no passages", "mem", false)}${block(rag, `After reading ${n} passages`, "with", true)}</div><p class="ruling">${ruling}</p><div class="passages">${passages}</div>`;
+  $("screen").querySelectorAll(".more").forEach(b => b.addEventListener("click", () => { b.parentElement.classList.add("full"); b.remove(); }));
 }
 
-/* The docket of example questions */
-(function docket(){
-  const groups = [["right", "Answered from the record"], ["declined", "Correctly said “I don't know”"], ["wrong", "Got it wrong"]];
-  let n = 0;
-  const html = groups.map(([key, title]) => {
-    const items = EXAMPLES.filter(e => e.group === key);
-    if (!items.length) return "";
-    return `<h2>${title}</h2><ol>${items.map(e => { n++; return `<li><button type="button" data-i="${EXAMPLES.indexOf(e)}"><span>${String(n).padStart(2, "0")}</span><span>${esc(e.question)}</span></button></li>`; }).join("")}</ol>`;
-  }).join("");
-  $("docket").innerHTML = html;
-  $("docket").addEventListener("click", ev => {
-    const b = ev.target.closest("button[data-i]");
-    if (!b) return;
-    $("docket").querySelectorAll("button").forEach(x => x.setAttribute("aria-current", x === b ? "true" : "false"));
-    render(EXAMPLES[+b.dataset.i]);
+/* The fiche of example questions */
+(function fiche(){
+  const marks = { right: "✓", declined: "–", wrong: "✗" };
+  const said = { right: "answered right", declined: "correctly declined", wrong: "got it wrong" };
+  const cols = `<span class="ax"></span>` + [1, 2, 3, 4].map(c => `<span class="ax col">${c}</span>`).join("");
+  let cells = "";
+  EXAMPLES.forEach((e, i) => {
+    if (i % 4 === 0) cells += `<span class="ax row">${"ABCDEFGH"[i / 4]}</span>`;
+    cells += `<button type="button" class="frame" data-i="${i}" aria-pressed="false"><span class="co"><span>${coord(i)}</span><b class="mark sym ${e.group}" aria-hidden="true">${marks[e.group]}</b><span class="sr">${said[e.group]}</span></span><span class="q">${esc(e.question)}</span></button>`;
   });
-  const first = $("docket").querySelector("button[data-i]");
+  $("grid").innerHTML = cols + cells;
+  $("ficheCount").textContent = `${EXAMPLES.length} frames`;
+  $("grid").addEventListener("click", ev => {
+    const b = ev.target.closest(".frame");
+    if (!b) return;
+    $("grid").querySelectorAll(".frame").forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    const i = +b.dataset.i;
+    render(EXAMPLES[i], `Frame ${coord(i)} · test question`, false);
+  });
+  const first = $("grid").querySelector(".frame");
   if (first) first.click();
 })();
 
@@ -338,24 +400,21 @@ function render(ex){
   $("ask").addEventListener("keydown", async ev => {
     if (ev.key !== "Enter" || !ev.target.value.trim()) return;
     const q = ev.target.value.trim();
-    $("liveStatus").textContent = "Searching the record and asking the model…";
+    $("liveStatus").textContent = "Searching the documents and asking the model…";
     try {
       const r = await fetch("/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q }) });
       const res = await r.json();
       if (!r.ok) throw new Error(res.error || r.statusText);
-      const rec = { question: q, impossible: false, gold: [], closed: { abstained: true, answer: "" }, rag: { answer: res.answer, abstained: res.abstained, cited: res.cited, em: 1, f1: 1, retrieved: true, sources: res.sources.map(s => ({ title: s.title, text: s.text, gold: false })) } };
-      render(rec);
-      $("transcript").querySelector(".ruling").textContent = `Answered live in ${(res.ms / 1000).toFixed(1)} s. There's no gold answer for your own question, so check the exhibits.`;
-      $("transcript").querySelectorAll(".qa dt, .qa dd").forEach((el, i) => { if (i === 2 || i === 3) el.remove(); });
-      numberLines();
-      $("liveStatus").textContent = "Answered by the Footnote server you're connected to.";
+      $("grid").querySelectorAll(".frame").forEach(x => x.setAttribute("aria-pressed", "false"));
+      render({ question: q, impossible: false, gold: [], ms: res.ms, closed: {}, rag: { answer: res.answer, abstained: res.abstained, cited: res.cited, sources: (res.sources || []).map(s => ({ title: s.title, text: s.text, gold: false })) } }, "Your question", true);
+      $("liveStatus").textContent = "Answered by the Footnote server this page came from.";
     } catch (e) {
       $("liveStatus").textContent = "The server couldn't answer: " + e.message;
     }
   });
 })();
 
-/* Findings: recall at k */
+/* 01: recall at k */
 const T = RETRIEVAL.test, U = RETRIEVAL.tune;
 const methods = [["lexical", "var(--c-lex)", "word search", "square"], ["dense", "var(--c-dense)", "meaning search", "circle"], ["hybrid", "var(--c-hyb)", "both, fused", "diamond"]];
 (function recall(){
@@ -374,12 +433,12 @@ const methods = [["lexical", "var(--c-lex)", "word search", "square"], ["dense",
   for (const [key, color, name, shape] of methods) {
     const s = T[ch][key];
     const pts = ks.map(k => [X(k), Y(s.recall[k])]);
-    el("path", { d: "M" + pts.map(p => p.join(",")).join("L"), fill: "none", stroke: color, "stroke-width": key === "hybrid" ? 2.5 : 2 }, svg);
+    el("path", { d: "M" + pts.map(p => p.join(",")).join("L"), fill: "none", stroke: color, "stroke-width": 2 }, svg);
     ks.forEach((k, i) => {
       const [x, y] = pts[i];
-      if (shape === "circle") el("circle", { cx: x, cy: y, r: 4.5, fill: color, stroke: "var(--paper)", "stroke-width": 2 }, svg);
-      else if (shape === "square") el("rect", { x: x - 4.5, y: y - 4.5, width: 9, height: 9, fill: color, stroke: "var(--paper)", "stroke-width": 2 }, svg);
-      else el("path", { d: `M${x} ${y - 6}L${x + 6} ${y}L${x} ${y + 6}L${x - 6} ${y}Z`, fill: color, stroke: "var(--paper)", "stroke-width": 2 }, svg);
+      if (shape === "circle") el("circle", { cx: x, cy: y, r: 4.5, fill: color, stroke: "var(--screen)", "stroke-width": 2 }, svg);
+      else if (shape === "square") el("rect", { x: x - 4.5, y: y - 4.5, width: 9, height: 9, fill: color, stroke: "var(--screen)", "stroke-width": 2 }, svg);
+      else el("path", { d: `M${x} ${y - 6}L${x + 6} ${y}L${x} ${y + 6}L${x - 6} ${y}Z`, fill: color, stroke: "var(--screen)", "stroke-width": 2 }, svg);
       const hit = el("circle", { class: "hit", cx: x, cy: y, r: 12 }, svg);
       hit.addEventListener("pointerenter", () => { tip.textContent = `${name}, top ${k}\n${pct(s.recall[k], 1)} of ${fmt(s.questions)} test questions`; tip.style.opacity = 1; });
       hit.addEventListener("pointermove", e => { tip.style.left = Math.min(e.clientX + 14, innerWidth - 290) + "px"; tip.style.top = e.clientY + 14 + "px"; });
@@ -392,56 +451,51 @@ const methods = [["lexical", "var(--c-lex)", "word search", "square"], ["dense",
   for (const [y, name, color] of ends) el("text", { class: "lbl", x: X(20) + 10, y: y + 4, fill: color }, svg).textContent = name;
   $("recallChart").append(svg);
   const lx = T[ch].lexical, dn = T[ch].dense, hy = T[ch].hybrid;
-  $("recallText").textContent = `On ${fmt(hy.questions)} answerable test questions, with the documents cut into paragraphs: the passage holding the answer is ranked first ${pct(lx.recall[1])} of the time by word search, ${pct(dn.recall[1])} by meaning search and ${pct(hy.recall[1])} by both fused. In the top ${CHOSEN.k}, the number the model sees: ${pct(lx.recall[CHOSEN.k])}, ${pct(dn.recall[CHOSEN.k])} and ${pct(hy.recall[CHOSEN.k])}. Fusion adds 1/(60 + rank) from each list, so a passage both searches like rises; here word search is weak enough that it mostly pulls the right passage down from first place. ${CHOSEN.method === "dense" ? "So the system uses meaning search alone." : ""}`;
+  $("recallText").textContent = `On ${fmt(hy.questions)} answerable test questions, with the documents cut into paragraphs, the passage holding the answer comes first ${pct(lx.recall[1])} of the time with word search, ${pct(dn.recall[1])} with meaning search and ${pct(hy.recall[1])} with both fused. In the top ${CHOSEN.k}, which is what the model reads, those are ${pct(lx.recall[CHOSEN.k])}, ${pct(dn.recall[CHOSEN.k])} and ${pct(hy.recall[CHOSEN.k])}. Fusion adds 1/(60 + rank) from each list, so a passage both searches like rises. Here word search is weak enough that it mostly pulls the right passage down from first place.${CHOSEN.method === "dense" ? " So the system uses meaning search alone." : ""}`;
   const np = T[ch]["dense-noprefix"];
   const gap = (dn.recall[1] - np.recall[1]) * 100;
   $("prefixText").textContent = `The embedding model was trained to see "search_query: " in front of questions. With it, meaning search ranks the right passage first ${pct(dn.recall[1], 1)} of the time; without it, ${pct(np.recall[1], 1)}. ${Math.abs(gap) < 1 ? "On these questions the prefix makes no real difference." : gap > 0 ? "The prefix helps." : "The prefix hurts."}`;
 })();
 
-/* Chunking, decided on the tuning articles */
+/* 02: chunking, decided on the tuning articles */
 (function chunks(){
   const names = { para: "Paragraphs", w100: "100-word windows", w300: "300-word windows" };
   const rows = Object.keys(names).map(c => `<tr class="${c === CHOSEN.chunker ? "chosen" : ""}"><td>${names[c]}</td><td>${fmt(INGEST[c].chunks)}</td><td>${INGEST[c].meanWords}</td><td>${pct(U[c][CHOSEN.method].recall[1], 1)}</td><td>${pct(U[c][CHOSEN.method].recall[CHOSEN.k], 1)}</td></tr>`).join("");
   $("chunkTable").innerHTML = `<thead><tr><th scope="col">Cut into</th><th scope="col">Pieces</th><th scope="col">Words each</th><th scope="col">Top 1</th><th scope="col">Top ${CHOSEN.k}</th></tr></thead><tbody>${rows}</tbody>`;
-  $("chunkText").textContent = `On the 10 tuning articles, with ${{ lexical: "word", dense: "meaning", hybrid: "fused" }[CHOSEN.method]} search. Smaller pieces are easier to match exactly but often cut an answer off from the words that identify it; bigger ones hold more but fill the model's short context. ${names[CHOSEN.chunker]} did best here, so that's what the system uses. (A piece counts only if it contains the whole answer.)`;
+  $("chunkText").textContent = `Measured on the 10 tuning articles with ${{ lexical: "word", dense: "meaning", hybrid: "fused" }[CHOSEN.method]} search. Smaller pieces are easier to match exactly but often cut an answer off from the words that identify it. Bigger ones hold more but fill the model's short context. ${names[CHOSEN.chunker]} did best, so that's what the system uses. A piece counts only if it contains the whole answer.`;
 })();
 
-/* Answers */
+/* 03: answers, from memory vs after reading */
 (function answers(){
   const s = ANSWERS.summary;
   const ca = s["closed/answerable"], ra = s["rag/answerable"], cu = s["closed/unanswerable"], ru = s["rag/unanswerable"];
-  $("answerIntro").textContent = `${fmt(ra.questions)} answerable and ${fmt(ru.questions)} unanswerable test questions, sampled at random, put to Qwen2.5 1.5B twice: from memory alone, and with the top ${ANSWERS.k} passages as exhibits.`;
-  const card = (k, a, b, la, lb) => `<div class="verdict"><div class="k">${k}</div><div class="pair"><span class="v">${a}</span><span class="l">${la}</span><span class="v rag">${b}</span><span class="l">${lb}</span></div></div>`;
-  $("verdicts").innerHTML =
-    card("Exact match, answerable", pct(ca.exactMatch, 1), pct(ra.exactMatch, 1), "from memory", "with exhibits") +
-    card("Word overlap (F1), answerable", pct(ca.f1, 1), pct(ra.f1, 1), "from memory", "with exhibits") +
-    card("Said “I don't know”, unanswerable", pct(cu.abstained, 1), pct(ru.abstained, 1), "from memory", "with exhibits");
-  $("answerText").textContent = `With exhibits, an exhibit held the answer for ${pct(ra.sourceHadAnswer)} of answerable questions, and when one did the model matched the gold answer exactly ${pct(ra.exactMatchWhenSourceHadAnswer)} of the time. It also wrongly said "I don't know" to ${pct(ra.abstained)} of answerable questions. Each answer took about ${(ra.meanMs / 1000).toFixed(1)} s on two CPU cores.`;
+  const bar = (title, a, b) => `<div class="bar"><h4>${title}</h4><div class="row"><span>from memory</span><span class="track"><span class="fill" style="width:${a * 100}%;background:var(--bar-mem)"></span></span><span class="v">${pct(a, 1)}</span></div><div class="row"><span>after reading</span><span class="track"><span class="fill" style="width:${b * 100}%;background:var(--c-dense)"></span></span><span class="v">${pct(b, 1)}</span></div></div>`;
+  $("bars").innerHTML = bar("Exact match, answerable questions", ca.exactMatch, ra.exactMatch) + bar("Word overlap (F1), answerable questions", ca.f1, ra.f1) + bar("Said “I don't know”, unanswerable questions", cu.abstained, ru.abstained);
+  $("answerIntro").textContent = `${fmt(ra.questions)} answerable and ${fmt(ru.questions)} unanswerable test questions, sampled at random, put to Qwen2.5 1.5B twice: from memory alone, and after reading the top ${ANSWERS.k} passages.`;
+  $("answerText").textContent = `A passage held the answer for ${pct(ra.sourceHadAnswer)} of answerable questions, and when one did, the model matched the gold answer exactly ${pct(ra.exactMatchWhenSourceHadAnswer)} of the time. It also wrongly said "I don't know" to ${pct(ra.abstained)} of answerable questions. Each answer took about ${(ra.meanMs / 1000).toFixed(1)} s on two CPU cores.`;
 })();
 
-/* The similarity gate */
+/* 04: the similarity gate */
 (function gate(){
   const rows = GATE.onTestRun;
   const label = r => r.name === "none" ? "No gate" : r.name === "youden" ? "Balanced on tuning" : "Blocks " + r.name.match(/\d+%/)[0] + " on tuning";
-  $("gateTable").innerHTML = `<thead><tr><th scope="col">Threshold</th><th scope="col">Min. similarity</th><th scope="col">Exact match</th><th scope="col">Declines unanswerable</th></tr></thead><tbody>${rows.map(r => `<tr class="${Math.abs(r.threshold - GATE.shipped) < 1e-3 ? "chosen" : ""}"><td>${label(r)}</td><td>${r.threshold < 0 ? "–" : r.threshold.toFixed(3)}</td><td>${pct(r.exactMatch, 1)}</td><td>${pct(r.unanswerableDeclined, 1)}</td></tr>`).join("")}</tbody>`;
-  const none = rows[0], ship = rows.find(r => Math.abs(r.threshold - GATE.shipped) < 1e-3), bal = rows.find(r => r.name === "youden");
-  $("gateText").textContent = `A cheap fix to try: if even the best passage is a weak match for the question, skip the model and say "I don't know". The thresholds were set on the tuning articles; the table shows what each does to the same ${fmt(ANSWERS.summary["rag/answerable"].questions * 2)} test answers. It only half works. The best passage's similarity tells answerable and unanswerable questions apart only a little better than chance (${pct(GATE.auc.test)} of pairs ordered correctly, where 50% is a coin flip), because SQuAD's unanswerable questions were written about the same paragraphs. The balanced threshold declines ${pct(bal.unanswerableDeclined, 1)} of unanswerable questions but drops exact match to ${pct(bal.exactMatch, 1)}. The server uses the mildest one: ${pct(ship.unanswerableDeclined, 1)} declined instead of ${pct(none.unanswerableDeclined, 1)}, for ${((none.exactMatch - ship.exactMatch) * 100).toFixed(1)} points of exact match.`;
+  $("gateTable").innerHTML = `<thead><tr><th scope="col">Threshold</th><th scope="col">Min. similarity</th><th scope="col">Exact match</th><th scope="col">Declines unanswerable</th></tr></thead><tbody>${rows.map(r => `<tr class="${r === shipped ? "chosen" : ""}"><td>${label(r)}</td><td>${r.threshold < 0 ? "–" : r.threshold.toFixed(3)}</td><td>${pct(r.exactMatch, 1)}</td><td>${pct(r.unanswerableDeclined, 1)}</td></tr>`).join("")}</tbody>`;
+  const none = rows[0], bal = rows.find(r => r.name === "youden");
+  $("gateText").textContent = `The fix tried here: if even the best passage is a weak match for the question, skip the model and say "I don't know". The thresholds were set on the tuning articles, and the table shows what each does to the same test answers. The best passage's similarity tells answerable and unanswerable questions apart only a little better than chance (${pct(GATE.auc.test)} of pairs ordered correctly, where 50% is a coin flip), because SQuAD's unanswerable questions were written about the same paragraphs. The balanced threshold declines ${pct(bal.unanswerableDeclined, 1)} of unanswerable questions but drops exact match to ${pct(bal.exactMatch, 1)}. The server uses the mildest one: ${pct(shipped.unanswerableDeclined, 1)} declined instead of ${pct(none.unanswerableDeclined, 1)}, for ${((none.exactMatch - shipped.exactMatch) * 100).toFixed(1)} points of exact match.`;
 })();
 
-/* Objections */
-(function objections(){
+/* 05: limits */
+(function limits(){
   const s = ANSWERS.summary, ru = s["rag/unanswerable"], ra = s["rag/answerable"];
   const items = [
-    ["Questions <i>with no answer</i>", `Half of SQuAD 2.0's questions were written to look answerable from the article when they aren't. With exhibits, the model still answered ${pct(1 - ru.abstained)} of them, and the similarity gate only brings that down to ${pct(1 - GATE.onTestRun.find(r => Math.abs(r.threshold - GATE.shipped) < 1e-3).unanswerableDeclined)}. A 1.5-billion-parameter model is a weak judge of "the text doesn't say".`],
-    ["Answers <i>in other words</i>", `Exact match is strict: "the Normans" and "Normans" count, but "in the 10th century" against "10th century" doesn't. Word-overlap F1 (${pct(ra.f1)}) gives partial credit, and the transcript shows the real answers.`],
-    ["Not your <i>notes yet</i>", `The documents are Wikipedia articles from SQuAD, because their questions come with known answers. Pointing Footnote at your own files means swapping the loader; the search, the database and the server stay the same.`],
+    ["Questions with no answer", `Half of SQuAD 2.0's questions were written to look answerable from the article when they aren't. After reading the passages, the model still answered ${pct(1 - ru.abstained)} of them, and the gate only brings that down to ${pct(1 - shipped.unanswerableDeclined)}. A 1.5-billion-parameter model is a weak judge of "the text doesn't say".`],
+    ["Answers in other words", `Exact match is strict: "the Normans" and "Normans" count, but "in the 10th century" against "10th century" doesn't. Word-overlap F1 (${pct(ra.f1)}) gives partial credit, and the frames above show the real answers.`],
+    ["Not your notes yet", `The documents are Wikipedia articles from SQuAD, because their questions come with known answers. Pointing Footnote at your own files means swapping the loader. The search, the database and the server stay the same.`],
   ];
-  $("objections").innerHTML = items.map(([h, p]) => `<div><h3>${h}</h3><p>${p}</p></div>`).join("") + `<div style="grid-column:1/-1"><h3>Running it</h3><p>The whole system runs in three containers: Postgres with pgvector, Ollama with the two models, and the Go API.</p><pre>scripts/get-data.sh && docker compose up -d db ollama && docker compose run --rm models
-docker compose run --rm ingest && docker compose up -d api
-curl -s localhost:8080/ask -d '{"question": "Who ruled Normandy?"}'</pre></div>`;
+  $("limits").innerHTML = items.map(([h, p]) => `<div><h4>${h}</h4><p>${p}</p></div>`).join("");
 })();
 
-/* All retrieval numbers */
+/* Every retrieval number */
 (function all(){
   const names = { lexical: "word search", "dense-noprefix": "meaning, no prefix", dense: "meaning search", hybrid: "both, fused" };
   let rows = "";
@@ -453,9 +507,6 @@ curl -s localhost:8080/ask -d '{"question": "Who ruled Normandy?"}'</pre></div>`
       }
   $("allTable").innerHTML = `<thead><tr><th scope="col">Questions · cut · search</th><th scope="col">n</th><th scope="col">Top 1</th><th scope="col">Top 3</th><th scope="col">Top 5</th><th scope="col">Top 20</th><th scope="col">MRR</th><th scope="col">ms</th></tr></thead><tbody>${rows}</tbody>`;
 })();
-
-addEventListener("resize", numberLines);
-document.fonts && document.fonts.ready.then(numberLines);
 </script>
 </body>
 </html>
