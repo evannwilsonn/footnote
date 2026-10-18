@@ -1,0 +1,4 @@
+bin/
+data/*.json
+results/cache/
+.impeccable/

@@ -1,0 +1,57 @@
+{
+  "auc": {
+    "test": 0.67,
+    "tune": 0.622
+  },
+  "chunker": "para",
+  "gatedTest": {
+    "answerable": 0.4035,
+    "unanswerable": 0.6667
+  },
+  "gatedTune": {
+    "answerable": 0.4887,
+    "unanswerable": 0.6846
+  },
+  "onTestRun": [
+    {
+      "correctAnswersBlocked": 0,
+      "exactMatch": 0.485,
+      "f1": 0.6224,
+      "name": "none",
+      "threshold": -1,
+      "unanswerableDeclined": 0.14
+    },
+    {
+      "correctAnswersBlocked": 0.005,
+      "exactMatch": 0.48,
+      "f1": 0.6174,
+      "name": "block 5% on tune",
+      "threshold": 0.6392,
+      "unanswerableDeclined": 0.205
+    },
+    {
+      "correctAnswersBlocked": 0.04,
+      "exactMatch": 0.445,
+      "f1": 0.5726,
+      "name": "block 10% on tune",
+      "threshold": 0.6676,
+      "unanswerableDeclined": 0.255
+    },
+    {
+      "correctAnswersBlocked": 0.055,
+      "exactMatch": 0.43,
+      "f1": 0.5481,
+      "name": "block 20% on tune",
+      "threshold": 0.6957,
+      "unanswerableDeclined": 0.385
+    },
+    {
+      "correctAnswersBlocked": 0.2,
+      "exactMatch": 0.285,
+      "f1": 0.3735,
+      "name": "youden",
+      "threshold": 0.7581,
+      "unanswerableDeclined": 0.685
+    }
+  ]
+}

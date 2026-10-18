@@ -1,0 +1,1 @@
+{"chunker":"para","method":"dense","k":3,"pickedOn":"tune","why":"best recall@1, @3 and MRR on the 10 tuning articles"}

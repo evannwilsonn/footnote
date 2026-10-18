@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Footnote question answering</title>
+<meta name="description" content="A retrieval-augmented question-answering system in Go with Postgres pgvector and local models, evaluated on SQuAD 2.0.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cutive+Mono&family=Libre+Bodoni:ital,wght@0,400;0,600;1,400&family=Public+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --desk:#e7e4dc;--paper:#fbfaf6;--ink:#1d1c1a;--soft:#46443f;--faint:#6a675f;--rule:#d9d5ca;
+  --margin:#c4361f;--margin-ink:#a82c17;--sticker:#bfe6cf;--sticker-ink:#123d29;--mark:#fdf0b6;--mark-ink:#1d1c1a;
+  --c-lex:#c4361f;--c-dense:#1b7f5f;--c-hyb:#4251b8;
+  --serif:"Libre Bodoni",Georgia,serif;--sans:"Public Sans",system-ui,sans-serif;--mono:"Cutive Mono","Courier New",monospace;
+  --line:30px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --desk:#0f1013;--paper:#15161a;--ink:#ecebe6;--soft:#c9c7bf;--faint:#a3a097;--rule:#2b2c31;
+  --margin:#e0573d;--margin-ink:#f07a62;--sticker:#1f4a36;--sticker-ink:#cdf0dc;--mark:#5a4c12;--mark-ink:#fff6d6;
+  --c-lex:#e0573d;--c-dense:#2ea57c;--c-hyb:#7683ea;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --desk:#0f1013;--paper:#15161a;--ink:#ecebe6;--soft:#c9c7bf;--faint:#a3a097;--rule:#2b2c31;
+  --margin:#e0573d;--margin-ink:#f07a62;--sticker:#1f4a36;--sticker-ink:#cdf0dc;--mark:#5a4c12;--mark-ink:#fff6d6;
+  --c-lex:#e0573d;--c-dense:#2ea57c;--c-hyb:#7683ea;color-scheme:dark}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--desk);color:var(--ink);font:400 16px/1.6 var(--sans)}
+a{color:inherit;text-underline-offset:3px}
+:focus-visible{outline:2px solid var(--margin);outline-offset:3px}
+.sheet{max-width:1080px;margin:28px auto 40px;background:var(--paper);position:relative;padding:44px 56px 64px 112px}
+/* Pleading paper: a double rule down the left margin and one on the right */
+.sheet::before{content:"";position:absolute;top:0;bottom:0;left:84px;width:5px;border-left:1.5px solid var(--margin);border-right:1.5px solid var(--margin);pointer-events:none}
+.sheet::after{content:"";position:absolute;top:0;bottom:0;right:28px;border-left:1.5px solid var(--margin);pointer-events:none}
+.top{display:flex;justify-content:space-between;align-items:center;gap:16px;font:400 14px var(--mono);color:var(--faint);margin-bottom:28px;flex-wrap:wrap}
+.top nav{display:flex;gap:18px}
+.top a,.top button{background:none;border:0;padding:2px 0;font:inherit;color:inherit;cursor:pointer;text-decoration:none;border-bottom:1px solid currentColor}
+
+/* Caption block, as on a court filing */
+.caption{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);border-top:1.5px solid var(--ink);border-bottom:1.5px solid var(--ink)}
+.caption > div{padding:16px 18px}
+.caption > div:first-child{border-right:1.5px solid var(--ink)}
+.caption .party{font:400 15px/1.5 var(--mono)}
+.caption .party b{display:block;font-weight:400;font-size:17px;margin-top:4px}
+.caption .no{font:400 15px/1.6 var(--mono)}
+h1{font:400 clamp(40px,6vw,74px)/1 var(--serif);text-align:center;margin:38px 0 6px;letter-spacing:.01em}
+h1 i{color:var(--margin-ink)}
+.sub{text-align:center;font:400 15px var(--mono);color:var(--faint);margin:0 0 30px}
+.lede{max-width:44em;margin:0 auto 40px;color:var(--soft);font-size:17px;text-wrap:pretty}
+
+/* The transcript */
+.hearing{position:relative;display:grid;grid-template-columns:260px minmax(0,1fr);gap:32px;align-items:start}
+.docket h2{font:600 13px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin:0 0 8px}
+.docket ol{list-style:none;margin:0 0 18px;padding:0;border-top:1px solid var(--rule)}
+.docket li button{display:grid;grid-template-columns:28px minmax(0,1fr);gap:6px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--rule);padding:8px 2px;font:400 14px/1.35 var(--sans);color:var(--ink);cursor:pointer}
+.docket li button:hover{background:color-mix(in srgb,var(--sticker) 40%,transparent)}
+.docket li button[aria-current="true"]{background:var(--sticker);color:var(--sticker-ink)}
+.docket li button span:first-child{font:400 13px var(--mono);color:var(--faint)}
+.docket li button[aria-current="true"] span:first-child{color:var(--sticker-ink)}
+.live{border:1.5px solid var(--ink);padding:12px;margin-bottom:18px}
+.live label{display:block;font:600 13px var(--sans);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px}
+.live input{width:100%;font:400 16px var(--mono);padding:8px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)}
+.live p{margin:6px 0 0;font-size:13px;color:var(--faint)}
+
+.transcript{position:relative;font:400 18px/var(--line) var(--mono)}
+.numbers{position:absolute;left:-112px;top:0;width:60px;text-align:right;font:400 14px/var(--line) var(--mono);color:var(--faint);user-select:none}
+.qa{display:grid;grid-template-columns:44px minmax(0,1fr);margin:0}
+.qa dt{font-weight:400}
+.qa dd{margin:0 0 var(--line)}
+.qa .who{font:400 13px/var(--line) var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+.qa .ans b{font-weight:400;background:var(--mark);color:var(--mark-ink);padding:1px 2px}
+.qa .ans.wrong b{background:none;text-decoration:line-through;text-decoration-color:var(--margin);text-decoration-thickness:2px}
+.cite{font:600 12.5px var(--sans);background:var(--sticker);color:var(--sticker-ink);padding:2px 6px;border-radius:2px;margin-left:6px;vertical-align:2px;white-space:nowrap}
+.ruling{font:400 14px/1.5 var(--sans);color:var(--soft);border-top:1px solid var(--rule);padding-top:8px;margin:0 0 26px}
+.ruling b{color:var(--ink)}
+.exhibits{display:grid;gap:16px}
+.exhibit{border:1px solid var(--rule);padding:16px 18px 14px;position:relative;font:400 15px/1.6 var(--sans);color:var(--soft)}
+.exhibit .stk{position:absolute;top:-11px;left:14px;background:var(--sticker);color:var(--sticker-ink);font:600 12px/1 var(--sans);letter-spacing:.08em;text-transform:uppercase;padding:5px 8px 4px;border-radius:2px}
+.exhibit .from{font:400 13px var(--mono);color:var(--faint);margin:2px 0 6px}
+.exhibit .from b{font-weight:400;color:var(--ink)}
+.exhibit.gold{border-color:var(--ink);border-width:1.5px;color:var(--ink)}
+.exhibit mark{background:var(--mark);color:var(--mark-ink);padding:0 2px}
+.exhibit .clip{max-height:9.6em;overflow:hidden}
+.exhibit.open .clip{max-height:none}
+.exhibit button{background:none;border:0;padding:4px 0 0;font:600 13px var(--sans);color:var(--faint);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+
+/* Findings */
+section{margin-top:76px}
+.head{border-bottom:1.5px solid var(--ink);padding-bottom:8px;margin-bottom:22px;display:flex;justify-content:space-between;align-items:baseline;gap:18px;flex-wrap:wrap}
+.head h2{font:400 clamp(32px,4.2vw,48px)/1 var(--serif);margin:0}
+.head h2 i{color:var(--margin-ink)}
+.head p{margin:0;max-width:30em;color:var(--soft);font-size:15px;text-wrap:pretty}
+.finding{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:36px;align-items:start;margin-bottom:40px}
+.finding h3{font:600 17px var(--sans);margin:0 0 8px}
+.finding p{margin:0 0 12px;color:var(--soft);text-wrap:pretty}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font:400 13px var(--sans);color:var(--soft);margin:0 0 6px}
+.legend span{display:inline-flex;gap:7px;align-items:center}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart .grid line{stroke:var(--rule)}
+.chart text{font:400 13px var(--sans);fill:var(--faint)}
+.chart .lbl{font-weight:600;font-size:13.5px}
+.chart .hit{fill:transparent;cursor:crosshair}
+.tip{position:fixed;z-index:20;pointer-events:none;background:var(--ink);color:var(--paper);font:400 13px/1.45 var(--sans);padding:8px 10px;max-width:280px;opacity:0;transition:opacity .12s;white-space:pre-line}
+table{border-collapse:collapse;width:100%;font:400 14px var(--sans)}
+th{text-align:right;font:600 12px var(--sans);letter-spacing:.05em;text-transform:uppercase;color:var(--faint);padding:6px 8px;border-bottom:1.5px solid var(--ink)}
+td{text-align:right;padding:7px 8px;border-bottom:1px solid var(--rule);font-variant-numeric:tabular-nums}
+th:first-child,td:first-child{text-align:left}
+tr.chosen td{font-weight:700}
+.verdicts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-top:8px}
+.verdict{border:1.5px solid var(--ink);padding:14px 16px}
+.verdict .k{font:600 12px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+.verdict .pair{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;align-items:baseline;margin-top:8px}
+.verdict .v{font:400 34px/1.1 var(--serif)}
+.verdict .v.rag{color:var(--margin-ink)}
+.verdict .l{font-size:13.5px;color:var(--soft)}
+.objections{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px}
+.objections h3{font:400 24px/1.1 var(--serif);margin:0 0 8px}
+.objections h3 i{color:var(--margin-ink)}
+.objections p{margin:0;color:var(--soft);text-wrap:pretty;font-size:15px}
+pre{background:var(--desk);color:var(--ink);font:400 13px/1.5 var(--mono);padding:10px 12px;overflow-x:auto;margin:8px 0 0}
+details{margin-top:28px}
+summary{cursor:pointer;font:600 14px var(--sans);color:var(--soft)}
+.tablewrap{overflow-x:auto;margin-top:8px}
+footer{margin-top:72px;border-top:1.5px solid var(--ink);padding-top:14px;font-size:14px;color:var(--soft);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:32px}
+footer p{margin:0 0 6px}
+
+@media (max-width:900px){
+  .sheet{padding:30px 22px 48px 64px}
+  .sheet::before{left:44px}
+  .sheet::after{display:none}
+  .numbers{left:-64px;width:34px;font-size:12px}
+  .hearing,.finding{grid-template-columns:minmax(0,1fr);gap:24px}
+  .objections,.verdicts{grid-template-columns:minmax(0,1fr)}
+  .caption{grid-template-columns:minmax(0,1fr)}
+  .caption > div:first-child{border-right:0;border-bottom:1.5px solid var(--ink)}
+  footer{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:520px){
+  .sheet{margin:0;padding:24px 16px 40px 46px}
+  .sheet::before{left:30px;width:4px}
+  .numbers{left:-46px;width:22px;font-size:11px}
+  .transcript{font-size:16px}
+  .qa{grid-template-columns:34px minmax(0,1fr)}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<article class="sheet">
+  <div class="top">
+    <span>FOOTNOTE · No. 10 · Go · Postgres pgvector · Ollama</span>
+    <nav><a href="https://github.com/evannwilsonn/footnote">source</a><button type="button" id="theme">lights off</button></nav>
+  </div>
+
+  <div class="caption">
+    <div class="party">IN THE MATTER OF<b id="capDocs">35 Wikipedia articles</b>and <span id="capQs">11,873</span> questions about them</div>
+    <div class="no">Case No. 10<br>Questions put to a 1.5-billion-parameter model,<br>with and without exhibits</div>
+  </div>
+
+  <h1>Answer <i>from the record.</i></h1>
+  <p class="sub">TRANSCRIPT OF PROCEEDINGS</p>
+  <p class="lede" id="lede">A question goes in. Footnote searches the documents, stored in Postgres with both full-text and vector indexes, hands the best passages to a small model running locally as numbered exhibits, and asks for the shortest answer it can cite, or "I don't know" when the exhibits don't say. Pick a question on the left to read the record.</p>
+
+  <div class="hearing">
+    <aside class="docket">
+      <div class="live" id="live" hidden>
+        <label for="ask">Ask a question</label>
+        <input id="ask" type="text" placeholder="Who ruled Normandy in the 10th century?" autocomplete="off">
+        <p id="liveStatus">Answered by the Footnote server you're connected to.</p>
+      </div>
+      <div id="docket"></div>
+    </aside>
+    <div>
+      <div class="transcript" id="transcript" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <section aria-labelledby="h-find">
+    <div class="head">
+      <h2 id="h-find">Findings of <i>fact</i></h2>
+      <p>Choices were made on questions about 10 articles; the numbers below are from the other 25, which weren't looked at until the end.</p>
+    </div>
+
+    <div class="finding">
+      <div>
+        <h3>Finding the right passage</h3>
+        <div class="legend" aria-hidden="true">
+          <span><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="var(--c-lex)" stroke-width="2"/><rect x="9" y="1" width="8" height="8" fill="var(--c-lex)"/></svg>word search (Postgres full text)</span>
+          <span><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="var(--c-dense)" stroke-width="2"/><circle cx="13" cy="5" r="4" fill="var(--c-dense)"/></svg>meaning search (pgvector)</span>
+          <span><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="var(--c-hyb)" stroke-width="2.5"/><path d="M13 0L18 5L13 10L8 5Z" fill="var(--c-hyb)"/></svg>both, fused</span>
+        </div>
+        <div class="chart" id="recallChart"></div>
+      </div>
+      <div><p id="recallText"></p><p id="prefixText"></p></div>
+    </div>
+
+    <div class="finding">
+      <div>
+        <h3>How to cut the documents</h3>
+        <div class="tablewrap"><table id="chunkTable"></table></div>
+      </div>
+      <div><p id="chunkText"></p></div>
+    </div>
+
+    <h3 style="font:600 17px var(--sans);margin:0 0 4px">Answers, with and without exhibits</h3>
+    <p style="margin:0 0 10px;color:var(--soft)" id="answerIntro"></p>
+    <div class="verdicts" id="verdicts"></div>
+    <p style="color:var(--soft);margin:16px 0 0" id="answerText"></p>
+
+    <div class="finding" style="margin-top:36px">
+      <div>
+        <h3>Declining before asking</h3>
+        <div class="tablewrap"><table id="gateTable"></table></div>
+      </div>
+      <div><p id="gateText"></p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-obj">
+    <div class="head"><h2 id="h-obj"><i>Objections</i></h2><p>Where it still goes wrong, and what it isn't.</p></div>
+    <div class="objections" id="objections"></div>
+    <details>
+      <summary>Every retrieval number, both question sets</summary>
+      <div class="tablewrap"><table id="allTable"></table></div>
+    </details>
+  </section>
+
+  <footer>
+    <div><p><b>Footnote</b>, project 10 of Evan Wilson's AI project run.</p><p><a href="https://github.com/evannwilsonn/footnote">github.com/evannwilsonn/footnote</a></p></div>
+    <div><p>Documents and questions from SQuAD 2.0 (Rajpurkar, Jia and Liang, 2018; CC BY-SA 4.0), built from Wikipedia. Embeddings by nomic-embed-text and answers by Qwen2.5 1.5B, both run locally through Ollama. Set in Libre Bodoni, Public Sans and Cutive Mono.</p></div>
+  </footer>
+</article>
+<div class="tip" id="tip" role="tooltip"></div>
+
+<script>
+const RETRIEVAL = {"split":{"seed":2026,"tuneDocIds":[0,5,12,16,22,24,26,29,32,33],"tuneDocuments":10},"test":{"para":{"dense":{"meanMs":1.24,"mrr":0.8183,"questions":4119,"recall":{"1":0.731,"10":0.9626,"20":0.9791,"3":0.8941,"5":0.9284}},"dense-noprefix":{"meanMs":1.2,"mrr":0.8177,"questions":4119,"recall":{"1":0.7288,"10":0.9629,"20":0.9806,"3":0.8939,"5":0.9311}},"hybrid":{"meanMs":5.59,"mrr":0.7827,"questions":4119,"recall":{"1":0.6761,"10":0.9597,"20":0.9888,"3":0.8716,"5":0.9175}},"lexical":{"meanMs":4.52,"mrr":0.5667,"questions":4119,"recall":{"1":0.4166,"10":0.8701,"20":0.9357,"3":0.6633,"5":0.7628}}},"w100":{"dense":{"meanMs":1.17,"mrr":0.7699,"questions":4119,"recall":{"1":0.673,"10":0.9366,"20":0.967,"3":0.8466,"5":0.8944}},"dense-noprefix":{"meanMs":1.28,"mrr":0.7732,"questions":4119,"recall":{"1":0.6766,"10":0.9395,"20":0.9665,"3":0.8468,"5":0.8917}},"hybrid":{"meanMs":7.41,"mrr":0.7544,"questions":4119,"recall":{"1":0.6443,"10":0.9461,"20":0.9767,"3":0.839,"5":0.8997}},"lexical":{"meanMs":6.3,"mrr":0.5613,"questions":4119,"recall":{"1":0.4292,"10":0.8315,"20":0.9085,"3":0.6353,"5":0.7298}}},"w300":{"dense":{"meanMs":3.84,"mrr":0.7078,"questions":4119,"recall":{"1":0.5798,"10":0.9281,"20":0.9643,"3":0.8053,"5":0.8725}},"dense-noprefix":{"meanMs":3.82,"mrr":0.71,"questions":4119,"recall":{"1":0.5853,"10":0.9301,"20":0.9631,"3":0.808,"5":0.873}},"hybrid":{"meanMs":8.24,"mrr":0.7273,"questions":4119,"recall":{"1":0.6014,"10":0.9539,"20":0.9815,"3":0.8264,"5":0.9}},"lexical":{"meanMs":4.67,"mrr":0.575,"questions":4119,"recall":{"1":0.4253,"10":0.8835,"20":0.9517,"3":0.6672,"5":0.7667}}}},"tune":{"para":{"dense":{"meanMs":1.15,"mrr":0.7891,"questions":1809,"recall":{"1":0.7087,"10":0.9287,"20":0.9619,"3":0.8496,"5":0.8922}},"dense-noprefix":{"meanMs":1.1,"mrr":0.7895,"questions":1809,"recall":{"1":0.7098,"10":0.932,"20":0.9602,"3":0.8524,"5":0.8944}},"hybrid":{"meanMs":4.62,"mrr":0.7558,"questions":1809,"recall":{"1":0.6423,"10":0.9458,"20":0.9746,"3":0.8463,"5":0.8966}},"lexical":{"meanMs":3.44,"mrr":0.5681,"questions":1809,"recall":{"1":0.4273,"10":0.8557,"20":0.9292,"3":0.6523,"5":0.7501}}},"w100":{"dense":{"meanMs":1.18,"mrr":0.7373,"questions":1809,"recall":{"1":0.639,"10":0.9082,"20":0.9386,"3":0.8148,"5":0.8585}},"dense-noprefix":{"meanMs":1.23,"mrr":0.7336,"questions":1809,"recall":{"1":0.6307,"10":0.9077,"20":0.9397,"3":0.817,"5":0.8673}},"hybrid":{"meanMs":6.07,"mrr":0.7355,"questions":1809,"recall":{"1":0.6235,"10":0.9281,"20":0.9619,"3":0.8214,"5":0.8773}},"lexical":{"meanMs":4.75,"mrr":0.5502,"questions":1809,"recall":{"1":0.4207,"10":0.8214,"20":0.895,"3":0.6263,"5":0.7225}}},"w300":{"dense":{"meanMs":3.91,"mrr":0.6559,"questions":1809,"recall":{"1":0.5307,"10":0.8922,"20":0.9409,"3":0.743,"5":0.8071}},"dense-noprefix":{"meanMs":4.01,"mrr":0.6646,"questions":1809,"recall":{"1":0.5401,"10":0.8911,"20":0.9436,"3":0.7463,"5":0.8203}},"hybrid":{"meanMs":7.47,"mrr":0.7081,"questions":1809,"recall":{"1":0.5876,"10":0.9397,"20":0.9701,"3":0.7988,"5":0.8734}},"lexical":{"meanMs":3.47,"mrr":0.5718,"questions":1809,"recall":{"1":0.4323,"10":0.8673,"20":0.9458,"3":0.6501,"5":0.7452}}}}};
+const ANSWERS = {"k":3,"summary":{"closed/answerable":{"abstained":0.08,"exactMatch":0.065,"f1":0.1607,"meanMs":735,"questions":200},"closed/unanswerable":{"abstained":0.095,"meanMs":686,"questions":200},"rag/answerable":{"abstained":0.03,"exactMatch":0.485,"exactMatchWhenSourceHadAnswer":0.5371,"f1":0.6224,"meanMs":5767,"questions":200,"sourceHadAnswer":0.875},"rag/unanswerable":{"abstained":0.14,"meanMs":5482,"questions":200}}};
+const EXAMPLES = [{"group":"right","question":"Who demonstrated that P= NP implies problems not present in P or NP-complete?","doc":"Computational complexity theory","impossible":false,"gold":["Ladner","Ladner","Ladner"],"closed":{"answer":"Seth Lloyd","abstained":false,"em":0,"f1":0,"retrieved":false,"cited":null},"rag":{"answer":"Ladner","abstained":false,"em":1,"f1":1,"retrieved":true,"cited":[1],"sources":[{"title":"Computational complexity theory","text":"It was shown by Ladner that if P ≠ NP then there exist problems in NP that are neither in P nor NP-complete. Such problems are called NP-intermediate problems. The graph isomorphism problem, the discrete logarithm problem and the integer factorization problem are examples of problems believed to be NP-intermediate. They are some of the very few NP problems not known to be in P or to be NP-complete.","gold":true},{"title":"Computational complexity theory","text":"If a problem X is in C and hard for C, then X is said to be complete for C. This means that X is the hardest problem in C. (Since many problems could be equally hard, one might say that X is one of the hardest problems in C.) Thus the class of NP-complete problems contains the most difficult problems in NP, in the sense that they are the ones most likely not to be in P. Because the problem P = NP is not solved, being able to reduce a known NP-complete problem, Π2, to another problem, Π1, would indicate that there is no known polynomial-time solution for Π1. This is because a polynomial-time solution to Π1 would yield a polynomial-time solution to Π2. Similarly, because all NP problems can be reduced to the set, finding an NP-complete problem that can be solved in polynomial time would mean that P = NP.","gold":false},{"title":"Computational complexity theory","text":"In 1967, Manuel Blum developed an axiomatic complexity theory based on his axioms and proved an important result, the so-called, speed-up theorem. The field really began to flourish in 1971 when the US researcher Stephen Cook and, working independently, Leonid Levin in the USSR, proved that there exist practically relevant problems that are NP-complete. In 1972, Richard Karp took this idea a leap forward with his landmark paper, \"Reducibility Among Combinatorial Problems\", in which he showed that 21 diverse combinatorial and graph theoretical problems, each infamous for its computational intractability, are NP-complete.","gold":false}]}},{"group":"right","question":"The Bruins belong to which college?","doc":"Southern California","impossible":false,"gold":["UCLA","UCLA","UCLA"],"closed":{"answer":"University of Massachusetts Amherst","abstained":false,"em":0,"f1":0,"retrieved":false,"cited":null},"rag":{"answer":"UCLA","abstained":false,"em":1,"f1":1,"retrieved":true,"cited":[1],"sources":[{"title":"Southern California","text":"College sports are also popular in southern California. The UCLA Bruins and the USC Trojans both field teams in NCAA Division I in the Pac-12 Conference, and there is a longtime rivalry between the schools.","gold":true},{"title":"Harvard University","text":"The Harvard Crimson competes in 42 intercollegiate sports in the NCAA Division I Ivy League. Harvard has an intense athletic rivalry with Yale University culminating in The Game, although the Harvard–Yale Regatta predates the football game. This rivalry, though, is put aside every two years when the Harvard and Yale Track and Field teams come together to compete against a combined Oxford University and Cambridge University team, a competition that is the oldest continuous international amateur competition in the world.","gold":false},{"title":"University of Chicago","text":"The University of Chicago (UChicago, Chicago, or U of C) is a private research university in Chicago. The university, established in 1890, consists of The College, various graduate programs, interdisciplinary committees organized into four academic research divisions and seven professional schools. Beyond the arts and sciences, Chicago is also well known for its professional schools, which include the Pritzker School of Medicine, the University of Chicago Booth School of Business, the Law School, the School of Social Service Administration, the Harris School of Public Policy Studies, the Graham School of Continuing Liberal and Professional Studies and the Divinity School. The university currently enrolls approximately 5,000 students in the College and around 15,000 students overall.","gold":false}]}},{"group":"right","question":"How many people were registered to receive the HD service prior to launch?","doc":"Sky (United Kingdom)","impossible":false,"gold":["40,000","40,000","40,000"],"closed":{"answer":"","abstained":true,"em":0,"f1":0,"retrieved":false,"cited":null},"rag":{"answer":"40,000","abstained":false,"em":1,"f1":1,"retrieved":true,"cited":[1],"sources":[{"title":"Sky (United Kingdom)","text":"BSkyB launched its HDTV service, Sky+ HD, on 22 May 2006. Prior to its launch, BSkyB claimed that 40,000 people had registered to receive the HD service. In the week before the launch, rumours started to surface that BSkyB was having supply issues with its set top box (STB) from manufacturer Thomson. On Thursday 18 May 2006, and continuing through the weekend before launch, people were reporting that BSkyB had either cancelled or rescheduled its installation. Finally, the BBC reported that 17,000 customers had yet to receive the service due to failed deliveries. On 31 March 2012, Sky announced the total number of homes with Sky+HD was 4,222,000.","gold":true},{"title":"Sky (United Kingdom)","text":"BSkyB's direct-to-home satellite service became available in 10 million homes in 2010, Europe's first pay-TV platform in to achieve that milestone. Confirming it had reached its target, the broadcaster said its reach into 36% of households in the UK represented an audience of more than 25m people. The target was first announced in August 2004, since then an additional 2.4m customers had subscribed to BSkyB's direct-to-home service. Media commentators had debated whether the figure could be reached as the growth in subscriber numbers elsewhere in Europe flattened.","gold":false},{"title":"Sky (United Kingdom)","text":"BSkyB's digital service was officially launched on 1 October 1998 under the name Sky Digital, although small-scale tests were carried out before then. At this time the use of the Sky Digital brand made an important distinction between the new service and Sky's analogue services. Key selling points were the improvement in picture and sound quality, increased number of channels and an interactive service branded Open.... now called Sky Active, BSkyB competed with the ONdigital (later ITV Digital) terrestrial offering and cable services. Within 30 days, over 100,000 digiboxes had been sold, which help bolstered BSkyB's decision to give away free digiboxes and minidishes from May 1999.","gold":false}]}},{"group":"right","question":"What did colonial authorities  reduce because of the Ballarat revolt?","doc":"Victoria (Australia)","impossible":false,"gold":["mining licence fees","mining licence fees","mining licence fees"],"closed":{"answer":"Gold","abstained":false,"em":0,"f1":0,"retrieved":false,"cited":null},"rag":{"answer":"Mining licence fees","abstained":false,"em":1,"f1":1,"retrieved":true,"cited":[1],"sources":[{"title":"Victoria (Australia)","text":"In 1854 at Ballarat there was an armed rebellion against the government of Victoria by miners protesting against mining taxes (the \"Eureka Stockade\"). This was crushed by British troops, but the discontents prompted colonial authorities to reform the administration (particularly reducing the hated mining licence fees) and extend the franchise. Within a short time, the Imperial Parliament granted Victoria responsible government with the passage of the Colony of Victoria Act 1855. Some of the leaders of the Eureka rebellion went on to become members of the Victorian Parliament.","gold":true},{"title":"Victoria (Australia)","text":"Prior to European settlement, the area now constituting Victoria was inhabited by a large number of Aboriginal peoples, collectively known as the Koori. With Great Britain having claimed the entire Australian continent east of the 135th meridian east in 1788, Victoria was included in the wider colony of New South Wales. The first settlement in the area occurred in 1803 at Sullivan Bay, and much of what is now Victoria was included in the Port Phillip District in 1836, an administrative division of New South Wales. Victoria was officially created a separate colony in 1851, and achieved self-government in 1855. The Victorian gold rush in the 1850s and 1860s significantly increased both the population and wealth of the colony, and by the Federation of Australia in 1901, Melbourne had become the largest city and leading financial centre in Australasia. Melbourne also served as capital of Australia until the construction of Canberra in 1927, with the Federal Parliament meeting in Melbourne's Parliament House and all principal offices of the federal government being based in Melbourne.","gold":false},{"title":"Victoria (Australia)","text":"On 1 July 1851, writs were issued for the election of the first Victorian Legislative Council, and the absolute independence of Victoria from New South Wales was established proclaiming a new Colony of Victoria. Days later, still in 1851 gold was discovered near Ballarat, and subsequently at Bendigo. Later discoveries occurred at many sites across Victoria. This triggered one of the largest gold rushes the world has ever seen. The colony grew rapidly in both population and economic power. In ten years the population of Victoria increased sevenfold from 76,000 to 540,000. All sorts of gold records were produced including the \"richest shallow alluvial goldfield in the world\" and the largest gold nugget. Victoria produced in the decade 1851–1860 20 million ounces of gold, one third of the world's output[citation needed].","gold":false}]}},{"group":"right","question":"Who patented a high-pressure compound engine in 1805?","doc":"Steam engine","impossible":false,"gold":["Arthur Woolf","Arthur Woolf","Arthur Woolf"],"closed":{"answer":"Richard Trevithick","abstained":false,"em":0,"f1":0,"retrieved":false,"cited":null},"rag":{"answer":"Arthur Woolf","abstained":false,"em":1,"f1":1,"retrieved":true,"cited":[1],"sources":[{"title":"Steam engine","text":"A method to lessen the magnitude of this heating and cooling was invented in 1804 by British engineer Arthur Woolf, who patented his Woolf high-pressure compound engine in 1805. In the compound engine, high-pressure steam from the boiler expands in a high-pressure (HP) cylinder and then enters one or more subsequent lower-pressure (LP) cylinders. The complete expansion of the steam now occurs across multiple cylinders and as less expansion now occurs in each cylinder less heat is lost by the steam in each. This reduces the magnitude of cylinder heating and cooling, increasing the efficiency of the engine. By staging the expansion in multiple cylinders, torque variability can be reduced. To derive equal work from lower-pressure steam requires a larger cylinder volume as this steam occupies a greater volume. Therefore, the bore, and often the stroke, are increased in low-pressure cylinders resulting in larger cylinders.","gold":true},{"title":"Steam engine","text":"Around 1800 Richard Trevithick and, separately, Oliver Evans in 1801 introduced engines using high-pressure steam; Trevithick obtained his high-pressure engine patent in 1802. These were much more powerful for a given cylinder size than previous engines and could be made small enough for transport applications. Thereafter, technological developments and improvements in manufacturing techniques (partly brought about by the adoption of the steam engine as a power source) resulted in the design of more efficient engines that could be smaller, faster, or more powerful, depending on the intended application.","gold":false},{"title":"Steam engine","text":"In 1781 James Watt patented a steam engine that produced continuous rotary motion. Watt's ten-horsepower engines enabled a wide range of manufacturing machinery to be powered. The engines could be sited anywhere that water and coal or wood fuel could be obtained. By 1883, engines that could provide 10,000 hp had become feasible. The stationary steam engine was a key component of the Industrial Revolution, allowing factories to locate where water power was unavailable. The atmospheric engines of Newcomen and Watt were large compared to the amount of power they produced, but high pressure steam engines were light enough to be applied to vehicles such as traction engines and the railway locomotives.","gold":false}]}},{"group":"declined","question":"Nineteen nations have what in this region?","doc":"Amazon rainforest","impossible":true,"gold":[],"closed":{"answer":"European Union member states","abstained":false,"em":0,"f1":0,"retrieved":false,"cited":null},"rag":{"answer":"","abstained":true,"em":0,"f1":0,"retrieved":false,"cited":null,"sources":[{"title":"Victoria (Australia)","text":"Victoria (abbreviated as Vic) is a state in the south-east of Australia. Victoria is Australia's most densely populated state and its second-most populous state overall. Most of its population is concentrated in the area surrounding Port Phillip Bay, which includes the metropolitan area of its capital and largest city, Melbourne, which is Australia's second-largest city. Geographically the smallest state on the Australian mainland, Victoria is bordered by Bass Strait and Tasmania to the south,[note 1] New South Wales to the north, the Tasman Sea to the east, and South Australia to the west.","gold":false},{"title":"Imperialism","text":"The Ottoman Empire was an imperial state that lasted from 1299 to 1923. During the 16th and 17th centuries, in particular at the height of its power under the reign of Suleiman the Magnificent, the Ottoman Empire was a powerful multinational, multilingual empire controlling much of Southeast Europe, Western Asia, the Caucasus, North Africa, and the Horn of Africa. At the beginning of the 17th century the empire contained 32 provinces and numerous vassal states. Some of these were later absorbed into the empire, while others were granted various types of autonomy during the course of centuries.","gold":false},{"title":"Amazon rainforest","text":"The Amazon rainforest (Portuguese: Floresta Amazônica or Amazônia; Spanish: Selva Amazónica, Amazonía or usually Amazonia; French: Forêt amazonienne; Dutch: Amazoneregenwoud), also known in English as Amazonia or the Amazon Jungle, is a moist broadleaf forest that covers most of the Amazon basin of South America. This basin encompasses 7,000,000 square kilometres (2,700,000 sq mi), of which 5,500,000 square kilometres (2,100,000 sq mi) are covered by the rainforest. This region includes territory belonging to nine nations. The majority of the forest is contained within Brazil, with 60% of the rainforest, followed by Peru with 13%, Colombia with 10%, and with minor amounts in Venezuela, Ecuador, Bolivia, Guyana, Suriname and French Guiana. States or departments in four nations contain \"Amazonas\" in their names. The Amazon represents over half of the planet's remaining rainforests, and comprises the largest and most biodiverse tract of tropical rainforest in the world, with an estimated 390 billion individual trees divided into 16,000 species.","gold":false}]}},{"group":"declined","question":"What are some examples of markets?","doc":"Construction","impossible":true,"gold":[],"closed":{"answer":"Stock market, cryptocurrency market, local farmer's market","abstained":false,"em":0,"f1":0,"retrieved":false,"cited":null},"rag":{"answer":"","abstained":true,"em":0,"f1":0,"retrieved":false,"cited":[1],"sources":[{"title":"Economic inequality","text":"In a purely capitalist mode of production (i.e. where professional and labor organizations cannot limit the number of workers) the workers wages will not be controlled by these organizations, or by the employer, but rather by the market. Wages work in the same way as prices for any other good. Thus, wages can be considered as a function of market price of skill. And therefore, inequality is driven by this price. Under the law of supply and demand, the price of skill is determined by a race between the demand for the skilled worker and the supply of the skilled worker. \"On the other hand, markets can also concentrate wealth, pass environmental costs on to society, and abuse workers and consumers.\" \"Markets, by themselves, even when they are stable, often lead to high levels of inequality, outcomes that are widely viewed as unfair.\" Employers who offer a below market wage will find that their business is chronically understaffed. Their competitors will take advantage of the situation by offering a higher wage the best of their labor. For a businessman who has the profit motive as the prime interest, it is a losing proposition to offer below or above market wages to workers.","gold":false},{"title":"Economic inequality","text":"Economist Joseph Stiglitz argues that rather than explaining concentrations of wealth and income, market forces should serve as a brake on such concentration, which may better be explained by the non-market force known as \"rent-seeking\". While the market will bid up compensation for rare and desired skills to reward wealth creation, greater productivity, etc., it will also prevent successful entrepreneurs from earning excess profits by fostering competition to cut prices, profits and large compensation. A better explainer of growing inequality, according to Stiglitz, is the use of political power generated by wealth by certain groups to shape government policies financially beneficial to them. This process, known to economists as rent-seeking, brings income not from creation of wealth but from \"grabbing a larger share of the wealth that would otherwise have been produced without their effort\"","gold":false},{"title":"Economic inequality","text":"Central Banking economist Raghuram Rajan argues that \"systematic economic inequalities, within the United States and around the world, have created deep financial 'fault lines' that have made [financial] crises more likely to happen than in the past\" – the Financial crisis of 2007–08 being the most recent example. To compensate for stagnating and declining purchasing power, political pressure has developed to extend easier credit to the lower and middle income earners – particularly to buy homes – and easier credit in general to keep unemployment rates low. This has given the American economy a tendency to go \"from bubble to bubble\" fueled by unsustainable monetary stimulation.","gold":false}]}},{"group":"declined","question":"Sky lost how many packages?","doc":"Sky (United Kingdom)","impossible":true,"gold":[],"closed":{"answer":"","abstained":true,"em":0,"f1":0,"retrieved":false,"cited":null},"rag":{"answer":"","abstained":true,"em":0,"f1":0,"retrieved":false,"cited":null,"sources":[{"title":"Sky (United Kingdom)","text":"BSkyB initially charged additional subscription fees for using a Sky+ PVR with their service; waiving the charge for subscribers whose package included two or more premium channels. This changed as from 1 July 2007, and now customers that have Sky+ and subscribe to any BSkyB subscription package get Sky+ included at no extra charge. Customers that do not subscribe to BSkyB's channels can still pay a monthly fee to enable Sky+ functions. In January 2010 BSkyB discontinued the Sky+ Box, limited the standard Sky Box to Multiroom upgrade only and started to issue the Sky+HD Box as standard, thus giving all new subscribers the functions of Sky+. In February 2011 BSkyB discontinued the non-HD variant of its Multiroom box, offering a smaller version of the SkyHD box without Sky+ functionality. In September 2007, Sky launched a new TV advertising campaign targeting Sky+ at women. As of 31 March 2008, Sky had 3,393,000 Sky+ users.","gold":false},{"title":"Sky (United Kingdom)","text":"Following a lengthy legal battle with the European Commission, which deemed the exclusivity of the rights to be against the interests of competition and the consumer, BSkyB's monopoly came to an end from the 2007–08 season. In May 2006, the Irish broadcaster Setanta Sports was awarded two of the six Premier League packages that the English FA offered to broadcasters. Sky picked up the remaining four for £1.3bn. In February 2015, Sky bid £4.2bn for a package of 120 premier league games across the three seasons from 2016. This represented an increase of 70% on the previous contract and was said to be £1bn more than the company had expected to pay. The move has been followed by staff cuts, increased subscription prices (including 9% in Sky's family package) and the dropping of the 3D channel.","gold":false},{"title":"Sky (United Kingdom)","text":"BSkyB launched its HDTV service, Sky+ HD, on 22 May 2006. Prior to its launch, BSkyB claimed that 40,000 people had registered to receive the HD service. In the week before the launch, rumours started to surface that BSkyB was having supply issues with its set top box (STB) from manufacturer Thomson. On Thursday 18 May 2006, and continuing through the weekend before launch, people were reporting that BSkyB had either cancelled or rescheduled its installation. Finally, the BBC reported that 17,000 customers had yet to receive the service due to failed deliveries. On 31 March 2012, Sky announced the total number of homes with Sky+HD was 4,222,000.","gold":false}]}},{"group":"wrong","question":"What extended as far north as 45°?","doc":"Amazon rainforest","impossible":true,"gold":[],"closed":{"answer":"Canada","abstained":false,"em":0,"f1":0,"retrieved":false,"cited":null},"rag":{"answer":"The English Channel, the Irish Channel, and most of the North Sea extended as far north as 45°","abstained":false,"em":0,"f1":0,"retrieved":false,"cited":null,"sources":[{"title":"Southern California","text":"\"Southern California\" is not a formal geographic designation, and definitions of what constitutes southern California vary. Geographically, California's north-south midway point lies at exactly 37° 9' 58.23\" latitude, around 11 miles (18 km) south of San Jose; however, this does not coincide with popular use of the term. When the state is divided into two areas (northern and southern California), the term \"southern California\" usually refers to the ten southern-most counties of the state. This definition coincides neatly with the county lines at 35° 47′ 28″ north latitude, which form the northern borders of San Luis Obispo, Kern, and San Bernardino counties. Another definition for southern California uses Point Conception and the Tehachapi Mountains as the northern boundary.","gold":false},{"title":"Southern California","text":"Though there is no official definition for the northern boundary of southern California, such a division has existed from the time when Mexico ruled California, and political disputes raged between the Californios of Monterey in the upper part and Los Angeles in the lower part of Alta California. Following the acquisition of California by the United States, the division continued as part of the attempt by several pro-slavery politicians to arrange the division of Alta California at 36 degrees, 30 minutes, the line of the Missouri Compromise. Instead, the passing of the Compromise of 1850 enabled California to be admitted to the Union as a free state, preventing southern California from becoming its own separate slave state.","gold":false},{"title":"Rhine","text":"The last glacial ran from ~74,000 (BP = Before Present), until the end of the Pleistocene (~11,600 BP). In northwest Europe, it saw two very cold phases, peaking around 70,000 BP and around 29,000–24,000 BP. The last phase slightly predates the global last ice age maximum (Last Glacial Maximum). During this time, the lower Rhine flowed roughly west through the Netherlands and extended to the southwest, through the English Channel and finally, to the Atlantic Ocean. The English Channel, the Irish Channel and most of the North Sea were dry land, mainly because sea level was approximately 120 m (390 ft) lower than today.","gold":false}]}},{"group":"wrong","question":"What were the reasons not to consolidate the government?","doc":"Jacksonville, Florida","impossible":true,"gold":[],"closed":{"answer":"Political divisions and power struggles","abstained":false,"em":0,"f1":0,"retrieved":false,"cited":null},"rag":{"answer":"Jacksonville, Florida","abstained":false,"em":0,"f1":0,"retrieved":false,"cited":[1],"sources":[{"title":"Jacksonville, Florida","text":"In the mid-1960s, corruption scandals began to arise among many of the city's officials, who were mainly elected through the traditional old boy network. After a grand jury was convened to investigate, 11 officials were indicted and more were forced to resign. Jacksonville Consolidation, led by J. J. Daniel and Claude Yates, began to win more support during this period, from both inner city blacks, who wanted more involvement in government, and whites in the suburbs, who wanted more services and more control over the central city. In 1964 all 15 of Duval County's public high schools lost their accreditation. This added momentum to proposals for government reform. Lower taxes, increased economic development, unification of the community, better public spending and effective administration by a more central authority were all cited as reasons for a new consolidated government.","gold":false},{"title":"French and Indian War","text":"An early important political response to the opening of hostilities was the convening of the Albany Congress in June and July, 1754. The goal of the congress was to formalize a unified front in trade and negotiations with various Indians, since allegiance of the various tribes and nations was seen to be pivotal in the success in the war that was unfolding. The plan that the delegates agreed to was never ratified by the colonial legislatures nor approved of by the crown. Nevertheless, the format of the congress and many specifics of the plan became the prototype for confederation during the War of Independence.","gold":false},{"title":"Rhine","text":"Since the Peace of Westphalia, the Upper Rhine formed a contentious border between France and Germany. Establishing \"natural borders\" on the Rhine was a long-term goal of French foreign policy, since the Middle Ages, though the language border was – and is – far more to the west. French leaders, such as Louis XIV and Napoleon Bonaparte, tried with varying degrees of success to annex lands west of the Rhine. The Confederation of the Rhine was established by Napoleon, as a French client state, in 1806 and lasted until 1814, during which time it served as a significant source of resources and military manpower for the First French Empire. In 1840, the Rhine crisis, prompted by French prime minister Adolphe Thiers's desire to reinstate the Rhine as a natural border, led to a diplomatic crisis and a wave of nationalism in Germany.","gold":false}]}},{"group":"wrong","question":"What is the smallest geographical region discussed?","doc":"Southern California","impossible":false,"gold":["counties","Riverside"],"closed":{"answer":"Country","abstained":false,"em":0,"f1":0,"retrieved":false,"cited":null},"rag":{"answer":"Victoria","abstained":false,"em":0,"f1":0,"retrieved":false,"cited":[1],"sources":[{"title":"Victoria (Australia)","text":"Victoria (abbreviated as Vic) is a state in the south-east of Australia. Victoria is Australia's most densely populated state and its second-most populous state overall. Most of its population is concentrated in the area surrounding Port Phillip Bay, which includes the metropolitan area of its capital and largest city, Melbourne, which is Australia's second-largest city. Geographically the smallest state on the Australian mainland, Victoria is bordered by Bass Strait and Tasmania to the south,[note 1] New South Wales to the north, the Tasman Sea to the east, and South Australia to the west.","gold":false},{"title":"Southern California","text":"Southern California, often abbreviated SoCal, is a geographic and cultural region that generally comprises California's southernmost 10 counties. The region is traditionally described as \"eight counties\", based on demographics and economic ties: Imperial, Los Angeles, Orange, Riverside, San Bernardino, San Diego, Santa Barbara, and Ventura. The more extensive 10-county definition, including Kern and San Luis Obispo counties, is also used based on historical political divisions. Southern California is a major economic center for the state of California and the United States.","gold":false},{"title":"Rhine","text":"The Rhine-Meuse Delta, the most important natural region of the Netherlands begins near Millingen aan de Rijn, close to the Dutch-German border with the division of the Rhine into Waal and Nederrijn. Since the Rhine contributes most of the water, the shorter term Rhine Delta is commonly used. However, this name is also used for the river delta where the Rhine flows into Lake Constance, so it is clearer to call the larger one Rhine-Meuse delta, or even Rhine–Meuse–Scheldt delta, as the Scheldt ends in the same delta.","gold":false}]}},{"group":"wrong","question":"What is the escape of the steam unlikely to accomplish in all but the smallest boilers?","doc":"Steam engine","impossible":false,"gold":["dampening the fire","dampening the fire","dampening the fire"],"closed":{"answer":"Nothing","abstained":false,"em":0,"f1":0,"retrieved":false,"cited":null},"rag":{"answer":"Lowering the steam pressure significantly","abstained":false,"em":0,"f1":0,"retrieved":true,"cited":null,"sources":[{"title":"Steam engine","text":"Lead fusible plugs may be present in the crown of the boiler's firebox. If the water level drops, such that the temperature of the firebox crown increases significantly, the lead melts and the steam escapes, warning the operators, who may then manually suppress the fire. Except in the smallest of boilers the steam escape has little effect on dampening the fire. The plugs are also too small in area to lower steam pressure significantly, depressurizing the boiler. If they were any larger, the volume of escaping steam would itself endanger the crew.[citation needed]","gold":true},{"title":"Steam engine","text":"Uniflow engines attempt to remedy the difficulties arising from the usual counterflow cycle where, during each stroke, the port and the cylinder walls will be cooled by the passing exhaust steam, whilst the hotter incoming admission steam will waste some of its energy in restoring working temperature. The aim of the uniflow is to remedy this defect and improve efficiency by providing an additional port uncovered by the piston at the end of each stroke making the steam flow only in one direction. By this means, the simple-expansion uniflow engine gives efficiency equivalent to that of classic compound systems with the added advantage of superior part-load performance, and comparable efficiency to turbines for smaller engines below one thousand horsepower. However, the thermal expansion gradient uniflow engines produce along the cylinder wall gives practical difficulties.[citation needed]. The Quasiturbine is a uniflow rotary steam engine where steam intakes in hot areas, while exhausting in cold areas.","gold":false},{"title":"Steam engine","text":"Steam engines frequently possess two independent mechanisms for ensuring that the pressure in the boiler does not go too high; one may be adjusted by the user, the second is typically designed as an ultimate fail-safe. Such safety valves traditionally used a simple lever to restrain a plug valve in the top of a boiler. One end of the lever carried a weight or spring that restrained the valve against steam pressure. Early valves could be adjusted by engine drivers, leading to many accidents when a driver fastened the valve down to allow greater steam pressure and more power from the engine. The more recent type of safety valve uses an adjustable spring-loaded valve, which is locked such that operators may not tamper with its adjustment unless a seal illegally is broken. This arrangement is considerably safer.[citation needed]","gold":false}]}}];
+const INGEST = {"bytes":970374,"documents":35,"embedModel":"nomic-embed-text","para":{"chunks":1204,"embedSeconds":392.1,"meanWords":126.6},"w100":{"chunks":2038,"embedSeconds":519.8,"meanWords":99.3},"w300":{"chunks":617,"embedSeconds":436.9,"meanWords":294.2}};
+const CHOSEN = {"chunker":"para","method":"dense","k":3};
+const GATE = {"auc":{"test":0.67,"tune":0.622},"chunker":"para","gatedTest":{"answerable":0.4035,"unanswerable":0.6667},"gatedTune":{"answerable":0.4887,"unanswerable":0.6846},"onTestRun":[{"correctAnswersBlocked":0,"exactMatch":0.485,"f1":0.6224,"name":"none","threshold":-1,"unanswerableDeclined":0.14},{"correctAnswersBlocked":0.005,"exactMatch":0.48,"f1":0.6174,"name":"block 5% on tune","threshold":0.6392,"unanswerableDeclined":0.205},{"correctAnswersBlocked":0.04,"exactMatch":0.445,"f1":0.5726,"name":"block 10% on tune","threshold":0.6676,"unanswerableDeclined":0.255},{"correctAnswersBlocked":0.055,"exactMatch":0.43,"f1":0.5481,"name":"block 20% on tune","threshold":0.6957,"unanswerableDeclined":0.385},{"correctAnswersBlocked":0.2,"exactMatch":0.285,"f1":0.3735,"name":"youden","threshold":0.7581,"unanswerableDeclined":0.685}],"shipped":0.6392};
+const $ = id => document.getElementById(id);
+const pct = (v, d = 0) => (v * 100).toFixed(d) + "%";
+const fmt = n => n.toLocaleString("en-US");
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+(function(){
+  const root = document.documentElement, btn = $("theme");
+  const dark = () => root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  const label = () => { btn.textContent = dark() ? "lights on" : "lights off"; };
+  try { const t = localStorage.getItem("footnote-theme"); if (t) root.dataset.theme = t; } catch (e) {}
+  label();
+  btn.addEventListener("click", () => {
+    root.dataset.theme = dark() ? "light" : "dark";
+    try { localStorage.setItem("footnote-theme", root.dataset.theme); } catch (e) {}
+    label();
+  });
+})();
+
+$("capDocs").textContent = `${INGEST.documents} Wikipedia articles`;
+
+/* Line numbers down the left margin, like pleading paper */
+function numberLines(){
+  // Numbered against the whole hearing (docket and transcript), so they sit in the sheet's left gutter.
+  const t = document.querySelector(".hearing");
+  let col = t.querySelector(":scope > .numbers");
+  if (!col) { col = document.createElement("div"); col.className = "numbers"; col.setAttribute("aria-hidden", "true"); t.prepend(col); }
+  col.innerHTML = "";
+  const n = Math.max(1, Math.floor(t.scrollHeight / 30));
+  col.innerHTML = Array.from({ length: n }, (_, i) => i + 1).join("<br>");
+}
+
+/* Highlight the gold answer inside an exhibit */
+function marked(text, golds){
+  let html = esc(text);
+  const seen = new Set();
+  for (const g of golds || []) {
+    if (!g || seen.has(g)) continue;
+    seen.add(g);
+    const i = html.indexOf(esc(g));
+    if (i >= 0) { html = html.slice(0, i) + "<mark>" + esc(g) + "</mark>" + html.slice(i + esc(g).length); break; }
+  }
+  return html;
+}
+
+function render(ex){
+  const golds = ex.gold || [];
+  const rag = ex.rag, closed = ex.closed;
+  const answerLine = (a, label, withCites) => {
+    if (a.abstained) return `<dt class="who">A.</dt><dd><span class="who">${label}</span><br>I don't know.</dd>`;
+    const right = !ex.impossible && a.em === 1;
+    const near = !ex.impossible && a.f1 > 0 && a.em < 1;
+    const cites = withCites ? (a.cited || []).map(n => `<span class="cite">Ex. ${n}</span>`).join("") : "";
+    return `<dt class="who">A.</dt><dd><span class="who">${label}</span><br><span class="ans${right || near ? "" : " wrong"}"><b>${esc(a.answer)}</b></span>${cites}</dd>`;
+  };
+  let ruling;
+  if (ex.impossible) ruling = rag.abstained ? "The articles don't answer this one. With exhibits, the model <b>correctly declined</b>." : "The articles don't answer this one, but the model <b>answered anyway</b>. That's a confabulation.";
+  else if (rag.em === 1) ruling = `Gold answer: <b>${esc(golds[0])}</b>. With exhibits, an <b>exact match</b>${rag.retrieved ? "" : ", though no exhibit held the answer"}.`;
+  else if (rag.abstained) ruling = `Gold answer: <b>${esc(golds[0])}</b>. The model said it didn't know${rag.retrieved ? " even though an exhibit held the answer" : "; no exhibit held the answer"}.`;
+  else ruling = `Gold answer: <b>${esc(golds[0])}</b>. ${rag.f1 > 0 ? `Partly right (F1 ${rag.f1.toFixed(2)})` : "Wrong"}${rag.retrieved ? "" : "; no exhibit held the answer"}.`;
+  const exhibits = (rag.sources || []).map((s, i) => `<div class="exhibit${s.gold ? " gold" : ""}"><span class="stk">Exhibit ${i + 1}${s.gold ? " · holds the answer" : ""}</span><p class="from">from <b>${esc(s.title)}</b></p><div class="clip">${marked(s.text, s.gold ? golds : [])}</div>${s.text.length > 420 ? `<button type="button" class="more">Read the whole exhibit</button>` : ""}</div>`).join("");
+  $("transcript").innerHTML = `<dl class="qa"><dt>Q.</dt><dd>${esc(ex.question)}</dd>${answerLine(closed, "from memory, no exhibits", false)}${answerLine(rag, `with ${(rag.sources || []).length} exhibits`, true)}</dl><p class="ruling">${ruling}</p><div class="exhibits">${exhibits}</div>`;
+  $("transcript").querySelectorAll(".more").forEach(b => b.addEventListener("click", () => { b.parentElement.classList.add("open"); b.remove(); numberLines(); }));
+  numberLines();
+}
+
+/* The docket of example questions */
+(function docket(){
+  const groups = [["right", "Answered from the record"], ["declined", "Correctly said “I don't know”"], ["wrong", "Got it wrong"]];
+  let n = 0;
+  const html = groups.map(([key, title]) => {
+    const items = EXAMPLES.filter(e => e.group === key);
+    if (!items.length) return "";
+    return `<h2>${title}</h2><ol>${items.map(e => { n++; return `<li><button type="button" data-i="${EXAMPLES.indexOf(e)}"><span>${String(n).padStart(2, "0")}</span><span>${esc(e.question)}</span></button></li>`; }).join("")}</ol>`;
+  }).join("");
+  $("docket").innerHTML = html;
+  $("docket").addEventListener("click", ev => {
+    const b = ev.target.closest("button[data-i]");
+    if (!b) return;
+    $("docket").querySelectorAll("button").forEach(x => x.setAttribute("aria-current", x === b ? "true" : "false"));
+    render(EXAMPLES[+b.dataset.i]);
+  });
+  const first = $("docket").querySelector("button[data-i]");
+  if (first) first.click();
+})();
+
+/* Live questions, when this page is served by `footnote serve` */
+(async function live(){
+  if (!/^https?:$/.test(location.protocol)) return;
+  try {
+    const r = await fetch("/health", { cache: "no-store" });
+    if (!r.ok || !(await r.json()).ok) return;
+  } catch (e) { return; }
+  $("live").hidden = false;
+  $("ask").addEventListener("keydown", async ev => {
+    if (ev.key !== "Enter" || !ev.target.value.trim()) return;
+    const q = ev.target.value.trim();
+    $("liveStatus").textContent = "Searching the record and asking the model…";
+    try {
+      const r = await fetch("/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q }) });
+      const res = await r.json();
+      if (!r.ok) throw new Error(res.error || r.statusText);
+      const rec = { question: q, impossible: false, gold: [], closed: { abstained: true, answer: "" }, rag: { answer: res.answer, abstained: res.abstained, cited: res.cited, em: 1, f1: 1, retrieved: true, sources: res.sources.map(s => ({ title: s.title, text: s.text, gold: false })) } };
+      render(rec);
+      $("transcript").querySelector(".ruling").textContent = `Answered live in ${(res.ms / 1000).toFixed(1)} s. There's no gold answer for your own question, so check the exhibits.`;
+      $("transcript").querySelectorAll(".qa dt, .qa dd").forEach((el, i) => { if (i === 2 || i === 3) el.remove(); });
+      numberLines();
+      $("liveStatus").textContent = "Answered by the Footnote server you're connected to.";
+    } catch (e) {
+      $("liveStatus").textContent = "The server couldn't answer: " + e.message;
+    }
+  });
+})();
+
+/* Findings: recall at k */
+const T = RETRIEVAL.test, U = RETRIEVAL.tune;
+const methods = [["lexical", "var(--c-lex)", "word search", "square"], ["dense", "var(--c-dense)", "meaning search", "circle"], ["hybrid", "var(--c-hyb)", "both, fused", "diamond"]];
+(function recall(){
+  const ks = [1, 3, 5, 10, 20], ch = CHOSEN.chunker;
+  const W = 620, H = 330, m = { l: 44, r: 110, t: 12, b: 40 };
+  const X = k => m.l + (Math.log(k) / Math.log(20)) * (W - m.l - m.r), Y = v => H - m.b - v * (H - m.t - m.b);
+  const ns = "http://www.w3.org/2000/svg";
+  const el = (t, a, p) => { const e = document.createElementNS(ns, t); for (const k in a) e.setAttribute(k, a[k]); p && p.append(e); return e; };
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Share of test questions whose answer is in the top k passages, by search method" });
+  const g = el("g", { class: "grid" }, svg);
+  for (let v = 0; v <= 1.0001; v += 0.2) { el("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v) }, g); el("text", { x: m.l - 8, y: Y(v) + 4, "text-anchor": "end" }, svg).textContent = Math.round(v * 100) + "%"; }
+  for (const k of ks) el("text", { x: X(k), y: H - m.b + 20, "text-anchor": "middle" }, svg).textContent = k;
+  el("text", { x: (m.l + W - m.r) / 2, y: H - 4, "text-anchor": "middle" }, svg).textContent = "passages handed over (k)";
+  const tip = $("tip");
+  const ends = [];
+  for (const [key, color, name, shape] of methods) {
+    const s = T[ch][key];
+    const pts = ks.map(k => [X(k), Y(s.recall[k])]);
+    el("path", { d: "M" + pts.map(p => p.join(",")).join("L"), fill: "none", stroke: color, "stroke-width": key === "hybrid" ? 2.5 : 2 }, svg);
+    ks.forEach((k, i) => {
+      const [x, y] = pts[i];
+      if (shape === "circle") el("circle", { cx: x, cy: y, r: 4.5, fill: color, stroke: "var(--paper)", "stroke-width": 2 }, svg);
+      else if (shape === "square") el("rect", { x: x - 4.5, y: y - 4.5, width: 9, height: 9, fill: color, stroke: "var(--paper)", "stroke-width": 2 }, svg);
+      else el("path", { d: `M${x} ${y - 6}L${x + 6} ${y}L${x} ${y + 6}L${x - 6} ${y}Z`, fill: color, stroke: "var(--paper)", "stroke-width": 2 }, svg);
+      const hit = el("circle", { class: "hit", cx: x, cy: y, r: 12 }, svg);
+      hit.addEventListener("pointerenter", () => { tip.textContent = `${name}, top ${k}\n${pct(s.recall[k], 1)} of ${fmt(s.questions)} test questions`; tip.style.opacity = 1; });
+      hit.addEventListener("pointermove", e => { tip.style.left = Math.min(e.clientX + 14, innerWidth - 290) + "px"; tip.style.top = e.clientY + 14 + "px"; });
+      hit.addEventListener("pointerleave", () => { tip.style.opacity = 0; });
+    });
+    ends.push([pts[pts.length - 1][1], name, color]);
+  }
+  ends.sort((a, b) => a[0] - b[0]);
+  for (let i = 1; i < ends.length; i++) if (ends[i][0] - ends[i - 1][0] < 16) ends[i][0] = ends[i - 1][0] + 16;
+  for (const [y, name, color] of ends) el("text", { class: "lbl", x: X(20) + 10, y: y + 4, fill: color }, svg).textContent = name;
+  $("recallChart").append(svg);
+  const lx = T[ch].lexical, dn = T[ch].dense, hy = T[ch].hybrid;
+  $("recallText").textContent = `On ${fmt(hy.questions)} answerable test questions, with the documents cut into paragraphs: the passage holding the answer is ranked first ${pct(lx.recall[1])} of the time by word search, ${pct(dn.recall[1])} by meaning search and ${pct(hy.recall[1])} by both fused. In the top ${CHOSEN.k}, the number the model sees: ${pct(lx.recall[CHOSEN.k])}, ${pct(dn.recall[CHOSEN.k])} and ${pct(hy.recall[CHOSEN.k])}. Fusion adds 1/(60 + rank) from each list, so a passage both searches like rises; here word search is weak enough that it mostly pulls the right passage down from first place. ${CHOSEN.method === "dense" ? "So the system uses meaning search alone." : ""}`;
+  const np = T[ch]["dense-noprefix"];
+  const gap = (dn.recall[1] - np.recall[1]) * 100;
+  $("prefixText").textContent = `The embedding model was trained to see "search_query: " in front of questions. With it, meaning search ranks the right passage first ${pct(dn.recall[1], 1)} of the time; without it, ${pct(np.recall[1], 1)}. ${Math.abs(gap) < 1 ? "On these questions the prefix makes no real difference." : gap > 0 ? "The prefix helps." : "The prefix hurts."}`;
+})();
+
+/* Chunking, decided on the tuning articles */
+(function chunks(){
+  const names = { para: "Paragraphs", w100: "100-word windows", w300: "300-word windows" };
+  const rows = Object.keys(names).map(c => `<tr class="${c === CHOSEN.chunker ? "chosen" : ""}"><td>${names[c]}</td><td>${fmt(INGEST[c].chunks)}</td><td>${INGEST[c].meanWords}</td><td>${pct(U[c][CHOSEN.method].recall[1], 1)}</td><td>${pct(U[c][CHOSEN.method].recall[CHOSEN.k], 1)}</td></tr>`).join("");
+  $("chunkTable").innerHTML = `<thead><tr><th scope="col">Cut into</th><th scope="col">Pieces</th><th scope="col">Words each</th><th scope="col">Top 1</th><th scope="col">Top ${CHOSEN.k}</th></tr></thead><tbody>${rows}</tbody>`;
+  $("chunkText").textContent = `On the 10 tuning articles, with ${{ lexical: "word", dense: "meaning", hybrid: "fused" }[CHOSEN.method]} search. Smaller pieces are easier to match exactly but often cut an answer off from the words that identify it; bigger ones hold more but fill the model's short context. ${names[CHOSEN.chunker]} did best here, so that's what the system uses. (A piece counts only if it contains the whole answer.)`;
+})();
+
+/* Answers */
+(function answers(){
+  const s = ANSWERS.summary;
+  const ca = s["closed/answerable"], ra = s["rag/answerable"], cu = s["closed/unanswerable"], ru = s["rag/unanswerable"];
+  $("answerIntro").textContent = `${fmt(ra.questions)} answerable and ${fmt(ru.questions)} unanswerable test questions, sampled at random, put to Qwen2.5 1.5B twice: from memory alone, and with the top ${ANSWERS.k} passages as exhibits.`;
+  const card = (k, a, b, la, lb) => `<div class="verdict"><div class="k">${k}</div><div class="pair"><span class="v">${a}</span><span class="l">${la}</span><span class="v rag">${b}</span><span class="l">${lb}</span></div></div>`;
+  $("verdicts").innerHTML =
+    card("Exact match, answerable", pct(ca.exactMatch, 1), pct(ra.exactMatch, 1), "from memory", "with exhibits") +
+    card("Word overlap (F1), answerable", pct(ca.f1, 1), pct(ra.f1, 1), "from memory", "with exhibits") +
+    card("Said “I don't know”, unanswerable", pct(cu.abstained, 1), pct(ru.abstained, 1), "from memory", "with exhibits");
+  $("answerText").textContent = `With exhibits, an exhibit held the answer for ${pct(ra.sourceHadAnswer)} of answerable questions, and when one did the model matched the gold answer exactly ${pct(ra.exactMatchWhenSourceHadAnswer)} of the time. It also wrongly said "I don't know" to ${pct(ra.abstained)} of answerable questions. Each answer took about ${(ra.meanMs / 1000).toFixed(1)} s on two CPU cores.`;
+})();
+
+/* The similarity gate */
+(function gate(){
+  const rows = GATE.onTestRun;
+  const label = r => r.name === "none" ? "No gate" : r.name === "youden" ? "Balanced on tuning" : "Blocks " + r.name.match(/\d+%/)[0] + " on tuning";
+  $("gateTable").innerHTML = `<thead><tr><th scope="col">Threshold</th><th scope="col">Min. similarity</th><th scope="col">Exact match</th><th scope="col">Declines unanswerable</th></tr></thead><tbody>${rows.map(r => `<tr class="${Math.abs(r.threshold - GATE.shipped) < 1e-3 ? "chosen" : ""}"><td>${label(r)}</td><td>${r.threshold < 0 ? "–" : r.threshold.toFixed(3)}</td><td>${pct(r.exactMatch, 1)}</td><td>${pct(r.unanswerableDeclined, 1)}</td></tr>`).join("")}</tbody>`;
+  const none = rows[0], ship = rows.find(r => Math.abs(r.threshold - GATE.shipped) < 1e-3), bal = rows.find(r => r.name === "youden");
+  $("gateText").textContent = `A cheap fix to try: if even the best passage is a weak match for the question, skip the model and say "I don't know". The thresholds were set on the tuning articles; the table shows what each does to the same ${fmt(ANSWERS.summary["rag/answerable"].questions * 2)} test answers. It only half works. The best passage's similarity tells answerable and unanswerable questions apart only a little better than chance (${pct(GATE.auc.test)} of pairs ordered correctly, where 50% is a coin flip), because SQuAD's unanswerable questions were written about the same paragraphs. The balanced threshold declines ${pct(bal.unanswerableDeclined, 1)} of unanswerable questions but drops exact match to ${pct(bal.exactMatch, 1)}. The server uses the mildest one: ${pct(ship.unanswerableDeclined, 1)} declined instead of ${pct(none.unanswerableDeclined, 1)}, for ${((none.exactMatch - ship.exactMatch) * 100).toFixed(1)} points of exact match.`;
+})();
+
+/* Objections */
+(function objections(){
+  const s = ANSWERS.summary, ru = s["rag/unanswerable"], ra = s["rag/answerable"];
+  const items = [
+    ["Questions <i>with no answer</i>", `Half of SQuAD 2.0's questions were written to look answerable from the article when they aren't. With exhibits, the model still answered ${pct(1 - ru.abstained)} of them, and the similarity gate only brings that down to ${pct(1 - GATE.onTestRun.find(r => Math.abs(r.threshold - GATE.shipped) < 1e-3).unanswerableDeclined)}. A 1.5-billion-parameter model is a weak judge of "the text doesn't say".`],
+    ["Answers <i>in other words</i>", `Exact match is strict: "the Normans" and "Normans" count, but "in the 10th century" against "10th century" doesn't. Word-overlap F1 (${pct(ra.f1)}) gives partial credit, and the transcript shows the real answers.`],
+    ["Not your <i>notes yet</i>", `The documents are Wikipedia articles from SQuAD, because their questions come with known answers. Pointing Footnote at your own files means swapping the loader; the search, the database and the server stay the same.`],
+  ];
+  $("objections").innerHTML = items.map(([h, p]) => `<div><h3>${h}</h3><p>${p}</p></div>`).join("") + `<div style="grid-column:1/-1"><h3>Running it</h3><p>The whole system runs in three containers: Postgres with pgvector, Ollama with the two models, and the Go API.</p><pre>scripts/get-data.sh && docker compose up -d db ollama && docker compose run --rm models
+docker compose run --rm ingest && docker compose up -d api
+curl -s localhost:8080/ask -d '{"question": "Who ruled Normandy?"}'</pre></div>`;
+})();
+
+/* All retrieval numbers */
+(function all(){
+  const names = { lexical: "word search", "dense-noprefix": "meaning, no prefix", dense: "meaning search", hybrid: "both, fused" };
+  let rows = "";
+  for (const [split, data] of [["tuning", U], ["test", T]])
+    for (const ch of Object.keys(data))
+      for (const m of Object.keys(names)) {
+        const s = data[ch][m];
+        rows += `<tr><td>${split} · ${ch} · ${names[m]}</td><td>${fmt(s.questions)}</td><td>${pct(s.recall[1], 1)}</td><td>${pct(s.recall[3], 1)}</td><td>${pct(s.recall[5], 1)}</td><td>${pct(s.recall[20], 1)}</td><td>${s.mrr.toFixed(3)}</td><td>${s.meanMs.toFixed(1)}</td></tr>`;
+      }
+  $("allTable").innerHTML = `<thead><tr><th scope="col">Questions · cut · search</th><th scope="col">n</th><th scope="col">Top 1</th><th scope="col">Top 3</th><th scope="col">Top 5</th><th scope="col">Top 20</th><th scope="col">MRR</th><th scope="col">ms</th></tr></thead><tbody>${rows}</tbody>`;
+})();
+
+addEventListener("resize", numberLines);
+document.fonts && document.fonts.ready.then(numberLines);
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "bytes": 970374,
+  "documents": 35,
+  "embedModel": "nomic-embed-text",
+  "para": {
+    "chunks": 1204,
+    "embedSeconds": 392.1,
+    "meanWords": 126.6
+  },
+  "w100": {
+    "chunks": 2038,
+    "embedSeconds": 519.8,
+    "meanWords": 99.3
+  },
+  "w300": {
+    "chunks": 617,
+    "embedSeconds": 436.9,
+    "meanWords": 294.2
+  }
+}
