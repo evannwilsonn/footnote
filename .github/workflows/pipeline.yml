@@ -1,0 +1,130 @@
+# Footnote's pipeline: test against a real pgvector database, build the API image, prove the image
+# starts and serves, then publish it to GitHub's container registry. Pull requests run everything
+# except the publish.
+name: pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: pipeline-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/footnote
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:0.8.0-pg16
+        env:
+          POSTGRES_USER: rag
+          POSTGRES_PASSWORD: rag
+          POSTGRES_DB: rag
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U rag"
+          --health-interval 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Formatting
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; echo "run gofmt -w ."; exit 1; }
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Tests (store tests run against the pgvector service)
+        run: go test -race -count=1 ./...
+        env:
+          TEST_DATABASE_URL: postgres://rag:rag@localhost:5432/rag
+
+      - name: Results page matches the committed results
+        # builddemo regenerates docs/index.html from results/*.json. If the page in the repo
+        # differs, someone changed results without rebuilding the page (or the other way round).
+        run: |
+          go run ./cmd/builddemo
+          git diff --exit-code -- docs/
+
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:0.8.0-pg16
+        env:
+          POSTGRES_USER: rag
+          POSTGRES_PASSWORD: rag
+          POSTGRES_DB: rag
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U rag"
+          --health-interval 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test the image
+        # The container talks to the pgvector service on the runner's network. /health needs the
+        # database; / serves the results page. Ollama isn't needed for either.
+        run: |
+          tag=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          docker run -d --name footnote --network host \
+            -e DATABASE_URL=postgres://rag:rag@localhost:5432/rag "$tag"
+          for i in $(seq 1 30); do curl -fs localhost:8080/health && break; sleep 1; done
+          # Saved to files first: with pipefail, `curl | grep -q` can fail when grep exits early.
+          curl -fs localhost:8080/health -o health.json && grep -q '"ok": true' health.json
+          curl -fs localhost:8080/ -o page.html && grep -q '<title>' page.html
+          docker image inspect "$tag" --format 'image size: {{.Size}} bytes'
+          docker logs footnote
+
+      - name: Log in to GitHub's container registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha

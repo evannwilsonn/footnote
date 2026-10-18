@@ -1,0 +1,16 @@
+# Development: rebuilds and restarts the API whenever Go code or the page changes.
+#
+#   docker compose -f docker-compose.yml -f compose.dev.yml watch
+services:
+  api:
+    develop:
+      watch:
+        - action: rebuild
+          path: ./cmd
+        - action: rebuild
+          path: ./internal
+        - action: rebuild
+          path: ./go.mod
+        - action: sync+restart
+          path: ./docs
+          target: /app/docs

@@ -1,0 +1,15 @@
+# Production: runs the image the pipeline published instead of building from source.
+#
+#   docker compose -f docker-compose.yml -f compose.prod.yml pull
+#   docker compose -f docker-compose.yml -f compose.prod.yml up -d
+#
+# IMAGE_TAG picks a version (a commit's short SHA); without it, the latest build of main runs.
+services:
+  api:
+    build: !reset null
+    image: ghcr.io/evannwilsonn/footnote:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+  db:
+    restart: unless-stopped
+  ollama:
+    restart: unless-stopped

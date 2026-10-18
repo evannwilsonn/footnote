@@ -2,6 +2,8 @@
 
 Question answering over a set of documents, with citations. Footnote stores the documents in Postgres, finds the passages most likely to hold the answer with pgvector, and hands them to a small model running locally as numbered exhibits. It asks for the shortest answer the exhibits support, with the exhibit number, or "I don't know". It's written in Go, uses free local models through Ollama, and ships as three containers.
 
+[![pipeline](https://github.com/evannwilsonn/footnote/actions/workflows/pipeline.yml/badge.svg)](https://github.com/evannwilsonn/footnote/actions/workflows/pipeline.yml)
+
 **Live page:** [evannwilsonn.github.io/footnote](https://evannwilsonn.github.io/footnote/) has the results and example transcripts. The live question box appears only when the page is served by `footnote serve`.
 
 ```
@@ -168,6 +170,31 @@ go test ./...
 ```
 
 `results/choice.json` records the settings picked on the tuning articles. The page design is described in [web/DESIGN.md](web/DESIGN.md).
+
+### Pipeline
+
+Every push to `main` runs [`.github/workflows/pipeline.yml`](.github/workflows/pipeline.yml):
+
+1. **Test.** `gofmt`, `go vet`, and `go test -race` with a pgvector Postgres running beside the tests, so the store's SQL (COPY loading, full-text ranking, HNSW search) is checked against a real database rather than mocked. The last step rebuilds `docs/index.html` from `results/` and fails if it differs from the committed page.
+2. **Image.** Builds the Dockerfile, starts the container against a fresh database, and checks `/health` and the results page before anything is published.
+3. **Publish.** Pushes the image to GitHub's container registry as `ghcr.io/evannwilsonn/footnote:latest` and `:<short sha>`. Pull requests run steps 1 and 2 only.
+
+Running it from the published image instead of building:
+
+```sh
+docker compose -f docker-compose.yml -f compose.prod.yml up -d             # latest
+IMAGE_TAG=<short sha> docker compose -f docker-compose.yml -f compose.prod.yml up -d
+```
+
+and with live rebuilds while editing the Go code:
+
+```sh
+docker compose -f docker-compose.yml -f compose.dev.yml watch
+```
+
+The store tests run locally too: `docker compose up -d db`, then `TEST_DATABASE_URL=postgres://rag:rag@localhost:5432/rag go test ./internal/store`. Without the variable they're skipped.
+
+The pipeline doesn't deploy to a server: the question box needs Ollama running a model, which needs more memory than a free host offers. The results page deploys to GitHub Pages from `docs/`.
 
 ## Layout
 
