@@ -1,0 +1,165 @@
+{
+  "chunker": "para",
+  "methods": {
+    "hyde": {
+      "llmSeconds": 13.96,
+      "mrr": 0.6094,
+      "noQueriesParsed": 0,
+      "recall": {
+        "1": 0.4833,
+        "10": 0.8333,
+        "20": 0.85,
+        "3": 0.75,
+        "5": 0.7667
+      }
+    },
+    "hyde-as-document": {
+      "llmSeconds": 13.96,
+      "mrr": 0.6251,
+      "noQueriesParsed": 0,
+      "recall": {
+        "1": 0.5,
+        "10": 0.8667,
+        "20": 0.8833,
+        "3": 0.7333,
+        "5": 0.7833
+      }
+    },
+    "multi-query": {
+      "llmSeconds": 10.23,
+      "mrr": 0.702,
+      "noQueriesParsed": 0,
+      "recall": {
+        "1": 0.5667,
+        "10": 0.9333,
+        "20": 1,
+        "3": 0.8333,
+        "5": 0.85
+      }
+    },
+    "question": {
+      "llmSeconds": 0,
+      "mrr": 0.7853,
+      "noQueriesParsed": 0,
+      "recall": {
+        "1": 0.65,
+        "10": 1,
+        "20": 1,
+        "3": 0.9167,
+        "5": 0.9333
+      }
+    },
+    "rag-fusion": {
+      "llmSeconds": 9.48,
+      "mrr": 0.7472,
+      "noQueriesParsed": 0,
+      "recall": {
+        "1": 0.6333,
+        "10": 0.9333,
+        "20": 1,
+        "3": 0.8333,
+        "5": 0.9167
+      }
+    },
+    "rag-fusion+question": {
+      "llmSeconds": 9.48,
+      "mrr": 0.7721,
+      "noQueriesParsed": 0,
+      "recall": {
+        "1": 0.6667,
+        "10": 0.95,
+        "20": 1,
+        "3": 0.8333,
+        "5": 0.9167
+      }
+    },
+    "step-back": {
+      "llmSeconds": 2.02,
+      "mrr": 0.7862,
+      "noQueriesParsed": 0,
+      "recall": {
+        "1": 0.6833,
+        "10": 0.9833,
+        "20": 1,
+        "3": 0.8833,
+        "5": 0.9
+      }
+    }
+  },
+  "questions": 60,
+  "samples": [
+    {
+      "fusion": [
+        "When was seafloor spreading first discovered?",
+        "What decade did seafloor spreading occur?",
+        "When was the discovery of seafloor spreading made?",
+        "In which decade was the concept of seafloor spreading first introduced?"
+      ],
+      "hyde": "Seafloor spreading was discovered in the 1950s. This groundbreaking scientific theory revolutionized our understanding of the Earth's crust and its movement. The discovery was made by a team of geologists led by Harry Hess and Maurice Ewing, who were studying the ocean floor. They observed that the ocean floor was not flat, as previously thought, but rather it was covered with a series of underwater mountains and trenches. This observation led them to conclude that the Earth's crust was not fixed but was instead moving in a continuous cycle. They proposed that the Earth's crust was divided into several large plates that were constantly moving, with the edges of these plates being pushed apart, creating new oceanic crust. This theory was further supported by the discovery of magnetic stripes on the ocean floor, which",
+      "multi": [
+        "What decade was the discovery of seafloor spreading made possible?",
+        "In which decade was the concept of seafloor spreading first introduced?",
+        "When was the discovery of seafloor spreading first reported?",
+        "What decade was the theory of seafloor spreading first proposed?",
+        "In which decade was the theory of seafloor spreading first developed?"
+      ],
+      "question": "In what decade was seafloor spreading discovered?",
+      "stepBack": "when was seafloor spreading discovered?"
+    },
+    {
+      "fusion": [
+        "What are some significant personal decisions civil disobedients make?",
+        "How do civil disobedients typically handle important personal decisions?",
+        "What are the most crucial personal decisions civil disobedients face?",
+        "What are the key factors that influence important personal decisions for civil disobedients?"
+      ],
+      "hyde": "An important personal decision for civil disobedients is often the choice to engage in nonviolent protest or direct action. This decision involves weighing the potential risks and rewards of taking a stand against perceived injustices or violations of civil rights. Civil disobedients must consider the impact of their actions on themselves, their families, and the broader community. They must also weigh the potential consequences of their actions, including the possibility of arrest, fines, or even imprisonment. Ultimately, the decision to engage in civil disobedience is a deeply personal one that requires a commitment to the cause and a willingness to take a stand for what one believes is right.",
+      "multi": [
+        "What are some significant personal decisions that civil disobedients often face?",
+        "How do civil disobedients typically make important personal decisions?",
+        "What are the key factors that influence the personal decisions of civil disobedients?",
+        "What are the most crucial personal decisions that civil disobedients make?",
+        "What are the important personal decisions that civil disobedients often encounter?"
+      ],
+      "question": "What is an important personal decision for civil disobedients?",
+      "stepBack": "what is an important decision for civil disobedients?"
+    },
+    {
+      "fusion": [
+        "What term describes middle-class citizens moving from suburban areas to urban centers?",
+        "Exploring the term used to describe middle-class individuals relocating from suburbs to cities.",
+        "What is the term used to describe middle-class families moving from suburban neighborhoods to urban areas?",
+        "Identifying the term that refers to middle-class individuals leaving suburban areas for urban living."
+      ],
+      "hyde": "The term that referred to middle class citizens leaving the suburbs was \"urbanization.\" This phenomenon, also known as \"urban migration,\" refers to the movement of people from rural areas to urban centers, typically for better job opportunities, education, and access to services. As suburbs became more desirable for middle class families seeking a better quality of life, many residents moved to the city, leading to a decrease in the number of people living in suburban areas. This trend has been observed in many countries around the world and has had significant impacts on urban and suburban development.",
+      "multi": [
+        "What term is used to describe middle-class individuals who have moved away from suburban areas?",
+        "What is the term that refers to middle-class families relocating from the suburbs?",
+        "What is the name for middle-class families that have moved out of the suburbs?",
+        "What is the term used to describe middle-class residents who have left the suburbs?",
+        "What is the term that signifies middle-class individuals who have moved from the suburbs?"
+      ],
+      "question": "What term referred to middle class citizens leaving the suburbs?",
+      "stepBack": "what term refers to middle class citizens leaving the suburbs?"
+    },
+    {
+      "fusion": [
+        "What is the concept of space-time curvature and how is it represented?",
+        "How does the curvature of space-time manifest in the path of a space-time traveler?",
+        "What are the implications of space-time being curved in the context of general relativity?",
+        "How does the curvature of space-time affect the trajectory of objects in the universe?"
+      ],
+      "hyde": "In space-time, a curved line represents a path that is not straight but follows the curvature of space-time. This concept is fundamental in general relativity, a theory developed by Albert Einstein, which describes gravity as a curvature of space-time caused by mass and energy. \n\nImagine space-time as a fabric where the fabric itself can curve due to the presence of mass or energy. A straight line in space-time, therefore, would be a path that is not straight but follows the curvature of this curved fabric. This curved line represents a path that is not possible in flat space-time but is a characteristic of space-time as described by general relativity.\n\nIn the context of space-time, a curved line is often used to describe the path of a particle or the trajectory of an object in a gravitational field.",
+      "multi": [
+        "What is the space-time path that is represented as a curved line in space?",
+        "How is the space-time path depicted as a curved line in space?",
+        "What is the space-time path that is visualized as a curved line in space?",
+        "What is the space-time path that is represented as a curved line in space?",
+        "How is the space-time path depicted as a curved line in space?"
+      ],
+      "question": "What space-time path is seen as a curved line in space?",
+      "stepBack": "what space-time path is seen as a curved line in space?"
+    }
+  ],
+  "split": "test"
+}

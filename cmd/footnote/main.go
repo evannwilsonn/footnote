@@ -511,6 +511,7 @@ type hitOut struct {
 	Title string  `json:"title"`
 	Text  string  `json:"text"`
 	Score float64 `json:"score"`
+	Kept  bool    `json:"kept"` // passed the relevance grader and was shown to the model
 }
 
 func (a *app) answer(q string) (askResponse, error) {
@@ -523,15 +524,45 @@ func (a *app) answer(q string) (askResponse, error) {
 	// With dense search, decline without asking the model when even the best passage is a weak
 	// match. The default threshold was picked on the tuning articles (see eval-gate).
 	minSim, _ := strconv.ParseFloat(env("FOOTNOTE_MIN_SIMILARITY", "0.6392"), 64)
+	declined := rag.Answer{Text: "I don't know.", Abstained: true}
+	// Then the course's relevance grader (CRAG) drops passages the model judges off topic, and
+	// the model answers from the rest. On the test questions this took unanswerable declines from
+	// 24% to 59% (see eval-graders). FOOTNOTE_GRADER=off skips it.
+	kept := make([]bool, len(hits))
 	var res rag.Answer
 	if r.Method == rag.Dense && (len(hits) == 0 || hits[0].Score < minSim) {
-		res = rag.Answer{Text: "I don't know.", Abstained: true}
-	} else if res, err = rag.Ask(a.ctx, a.llm, q, hits); err != nil {
-		return askResponse{}, err
+		res = declined
+	} else {
+		var use []store.Hit
+		var idx []int // position in hits of each passage in use
+		for i, h := range hits {
+			ok := true
+			if env("FOOTNOTE_GRADER", "relevance") != "off" {
+				if ok, err = rag.GradeDoc(a.ctx, a.llm, rag.Relevance, q, h); err != nil {
+					return askResponse{}, err
+				}
+			}
+			if ok {
+				kept[i] = true
+				use = append(use, h)
+				idx = append(idx, i)
+			}
+		}
+		if len(use) == 0 {
+			res = declined
+		} else if res, err = rag.Ask(a.ctx, a.llm, q, use); err != nil {
+			return askResponse{}, err
+		}
+		// Citations number the passages the model saw; renumber them as the full list.
+		for j, c := range res.Cited {
+			if c >= 1 && c <= len(idx) {
+				res.Cited[j] = idx[c-1] + 1
+			}
+		}
 	}
 	out := askResponse{Question: q, Answer: res.Text, Abstained: res.Abstained, Cited: res.Cited, Ms: time.Since(start).Milliseconds()}
 	for i, h := range hits {
-		out.Sources = append(out.Sources, hitOut{N: i + 1, Title: h.Title, Text: h.Text, Score: round(h.Score, 4)})
+		out.Sources = append(out.Sources, hitOut{N: i + 1, Title: h.Title, Text: h.Text, Score: round(h.Score, 4), Kept: kept[i]})
 	}
 	return out, nil
 }
@@ -617,7 +648,7 @@ func serve(args []string) error {
 func main() {
 	log.SetFlags(log.Ltime)
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: footnote ingest | eval-retrieval | eval-answers | eval-gate | ask \"question\" | serve")
+		fmt.Fprintln(os.Stderr, "usage: footnote ingest | eval-retrieval | eval-answers | eval-gate | eval-translate | eval-graders | ask \"question\" | serve")
 		os.Exit(2)
 	}
 	var err error
@@ -628,6 +659,10 @@ func main() {
 		err = evalRetrieval(os.Args[2:])
 	case "eval-answers":
 		err = evalAnswers(os.Args[2:])
+	case "eval-translate":
+		err = evalTranslate(os.Args[2:])
+	case "eval-graders":
+		err = evalGraders(os.Args[2:])
 	case "eval-gate":
 		err = evalGate(os.Args[2:])
 	case "ask":

@@ -90,6 +90,10 @@ func main() {
 	var gate map[string]any
 	read("results/gate.json", &gate)
 	gate["shipped"] = 0.6392 // the threshold the server ships with (FOOTNOTE_MIN_SIMILARITY)
+	// The "Learn RAG From Scratch" techniques: the graders and the question rewrites.
+	var graders, translate map[string]any
+	read("results/graders.json", &graders)
+	read("results/translate-test.json", &translate)
 	var answers struct {
 		K       int            `json:"k"`
 		Summary map[string]any `json:"summary"`
@@ -155,6 +159,8 @@ func main() {
 		"{{INGEST}}":    compact(ingest),
 		"{{CHOSEN}}":    compact(choice),
 		"{{GATE}}":      compact(gate),
+		"{{GRADERS}}":   compact(graders),
+		"{{TRANSLATE}}": compact(translate),
 	}
 	for k, v := range fills {
 		if strings.Count(html, k) != 1 {

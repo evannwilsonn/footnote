@@ -47,6 +47,7 @@ question ─► nomic-embed-text ─► pgvector HNSW (cosine) ─► top 3 para
 - **Embeddings:** `nomic-embed-text` (768 dimensions) through Ollama, with its `search_document:` / `search_query:` prefixes. They are loaded with `COPY` and indexed with one partial HNSW index per chunker.
 - **Search:** lexical (full text), dense (pgvector cosine), or hybrid (reciprocal-rank fusion of the top 20 from each, k = 60).
 - **Answering:** `qwen2.5:1.5b` at temperature 0 with a fixed seed, given the top passages as numbered exhibits. The reply is parsed for citations and abstentions, and scored with the official SQuAD normalisation (exact match and token F1).
+- **Declining:** before answering, the server skips the model if even the best passage is a weak match, then asks the model whether each passage is on topic and answers only from those it keeps (see Improvement).
 - **Serving:** `footnote serve` exposes `POST /ask` and `GET /health` and serves the results page.
 
 ## 5. Evaluation
@@ -95,7 +96,42 @@ The obvious fix for confabulation is to decline before asking the model when eve
 | Blocks 20% | 0.696 | 43.0% | 38.5% |
 | Balanced (Youden's J) | 0.758 | 28.5% | 68.5% |
 
-It only half works. The top passage's similarity barely separates answerable from unanswerable questions (AUC 0.62 on tuning, 0.67 on test, where 0.5 is chance), because SQuAD's unanswerable questions were written against the same paragraphs and match the text about as well as real ones. The server ships the mildest threshold, which buys 6.5 more points of correct declines for half a point of exact match. Closing the rest of the gap needs a stronger judge than a 1.5B model or a retrieval score, such as a larger model or a trained answerability classifier. The model also sometimes answers from its own knowledge despite the prompt: asked for the capital of Australia, it says "Canberra" while being shown three passages about the state of Victoria that don't mention it.
+It only half works. The top passage's similarity barely separates answerable from unanswerable questions (AUC 0.62 on tuning, 0.67 on test, where 0.5 is chance), because SQuAD's unanswerable questions were written against the same paragraphs and match the text about as well as real ones. The server ships the mildest threshold, which buys 6.5 more points of correct declines for half a point of exact match. Closing more of the gap needed a second look at the passages themselves: the relevance grader from the course, below, more than doubles the declines. A larger model or a trained answerability classifier would be the next step. The model also sometimes answers from its own knowledge despite the prompt: asked for the capital of Australia, it says "Canberra" while being shown three passages about the state of Victoria that don't mention it.
+
+### Techniques from "Learn RAG From Scratch"
+
+Lance Martin's freeCodeCamp course ([video](https://youtu.be/sVcwVQRHIc8), [code](https://github.com/langchain-ai/rag-from-scratch)) builds its techniques with LangChain and GPT-3.5. They are rebuilt here in Go without LangChain (`internal/rag/course.go`), with the course's prompts, and run on the same 1.5B model and the same test articles. The grader prompts come from the LangGraph CRAG and adaptive-RAG examples the course runs.
+
+**Graders** (`footnote eval-graders`, the first 80 answerable and 80 unanswerable questions of the answer run above):
+
+| Pipeline | Exact match | Declines answerable | Declines unanswerable |
+|---|---|---|---|
+| Plain retrieval | 45.0% | 3.8% | 16.3% |
+| Similarity gate (before) | 45.0% | 5.0% | 23.8% |
+| Relevance grader (course) | 50.0% | 10.0% | 55.0% |
+| **Gate + relevance grader (now shipped)** | **50.0%** | **11.3%** | **58.8%** |
+| Stricter "does it answer?" grader | 47.5% | 12.5% | 50.0% |
+| Hallucination check | 17.5% | 53.8% | 60.0% |
+| Stricter grader + hallucination check | 30.0% | 40.0% | 65.0% |
+
+- **Relevance grader:** asks the model, passage by passage, whether the passage is on topic; the model then answers from the passages it kept. It said yes to 94% of passages holding the answer and 25% of the rest.
+- **Shipped:** on top of the similarity gate it more than doubles correct declines and adds five points of exact match, for six more points of answerable questions declined. The server now runs it by default (`FOOTNOTE_GRADER=off` turns it off). On live questions, the page marks the passages it set aside.
+- **Cost:** it adds about 3.5 s per answer (13.3 s against 9.8 s for four test questions on the same, busier machine).
+- **Hallucination check:** asks whether the answer is supported by the passages. It rejected so many correct answers that it cuts exact match to a third. At this size, judging an answer is much harder for the model than judging a passage.
+- **Noise:** with 80 questions per group, differences under about 10 points are within noise. The relevance grader's gain on declines (+35 points) is well clear of that.
+
+**Rewriting the question** (`footnote eval-translate -split test -n 60`, 60 answerable test questions, the passage holding the answer must come back):
+
+| Search with | Top 1 | Top 3 | MRR | Model time |
+|---|---|---|---|---|
+| **The question as asked** | **65.0%** | **91.7%** | **0.785** | – |
+| Multi-query (5 rewrites, best match each) | 56.7% | 83.3% | 0.702 | +10.2 s |
+| RAG-Fusion (4 queries, RRF) | 63.3% | 83.3% | 0.747 | +9.5 s |
+| RAG-Fusion + the question | 66.7% | 83.3% | 0.772 | +9.5 s |
+| Step-back + the question | 68.3% | 88.3% | 0.786 | +2.0 s |
+| HyDE (a written answer, embedded) | 48.3% | 75.0% | 0.609 | +14.0 s |
+
+None of the rewrites beat plain search by more than two questions in 60, and all of them were worse at top 3, which is what the model reads. HyDE did worst. The small model's made-up answer passages state confident details of their own, which pull search toward the wrong paragraph: asked when seafloor spreading was discovered, it wrote a passage dating it to the 1950s and crediting a team led by Harry Hess and Maurice Ewing. SQuAD's questions are written from the paragraphs, so they already share their wording, and rewriting has little to fix. The server keeps plain search. On vaguer questions from real users, rewriting would have more to do.
 
 Running the evaluation also produced two robustness fixes. Embeddings are cached to disk, so a failed database write never means embedding everything again. The Ollama client retries server errors, because the model runner crashed once during an hour-long run.
 
@@ -112,7 +148,7 @@ curl -s localhost:8080/ask -d '{"question": "Who patented a high-pressure compou
 
 `db` is `pgvector/pgvector:0.8.0-pg16` and `ollama` is `ollama/ollama:0.40.6`. `api` is this repo's Dockerfile: a static Go binary on Alpine, running as a non-root user, about 27 MB. Open `localhost:8080` for the results page with a live question box.
 
-`POST /ask` returns `{question, answer, abstained, cited, sources: [{n, title, text, score}], ms}`. Settings come from the environment: `DATABASE_URL`, `OLLAMA_URL`, `EMBED_MODEL`, `CHAT_MODEL`, `FOOTNOTE_CHUNKER` (para), `FOOTNOTE_METHOD` (dense), `FOOTNOTE_K` (3) and `FOOTNOTE_MIN_SIMILARITY` (0.6392).
+`POST /ask` returns `{question, answer, abstained, cited, sources: [{n, title, text, score, kept}], ms}`; `kept` is false for passages the relevance grader set aside. Settings come from the environment: `DATABASE_URL`, `OLLAMA_URL`, `EMBED_MODEL`, `CHAT_MODEL`, `FOOTNOTE_CHUNKER` (para), `FOOTNOTE_METHOD` (dense), `FOOTNOTE_K` (3), `FOOTNOTE_MIN_SIMILARITY` (0.6392) and `FOOTNOTE_GRADER` (relevance, or off).
 
 ## Reproducing the numbers
 
@@ -125,6 +161,8 @@ go build -o bin/footnote ./cmd/footnote
 ./bin/footnote eval-retrieval                                                    # results/retrieval.json
 ./bin/footnote eval-answers -split test -n 200 -k 3 -chunker para -method dense  # about 1.5 h; resumable
 ./bin/footnote eval-gate                                                         # results/gate.json
+./bin/footnote eval-graders -n 80                                                # results/graders.json, about 1.5 h
+./bin/footnote eval-translate -split test -n 60                                  # results/translate-test.json, about 1 h
 go run ./cmd/builddemo                                                           # docs/index.html
 go test ./...
 ```
@@ -134,12 +172,12 @@ go test ./...
 ## Layout
 
 ```
-cmd/footnote/       CLI and HTTP server: ingest, eval-retrieval, eval-answers, eval-gate, ask, serve
+cmd/footnote/       CLI and HTTP server: ingest, eval-retrieval, eval-answers, eval-gate, eval-graders, eval-translate, ask, serve
 cmd/builddemo/      fills web/template.html with the results to make docs/index.html
 internal/corpus/    SQuAD loader, byte-exact answer spans, chunkers, tuning/test split
 internal/store/     Postgres schema, COPY loading, full-text and pgvector search
 internal/ollama/    embeddings and chat client
-internal/rag/       retrieval methods, fusion, prompt, citation parsing, SQuAD scoring
+internal/rag/       retrieval methods, fusion, prompt, citation parsing, SQuAD scoring, the course's rewrites and graders
 ```
 
 ## Limits

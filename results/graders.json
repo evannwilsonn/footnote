@@ -1,0 +1,81 @@
+{
+  "answers": "results/answers-test-k3.json",
+  "graderAgreement": {
+    "answers": {
+      "passages": 240,
+      "yesWhenPassageDoesNot": 0.2485,
+      "yesWhenPassageHoldsAnswer": 0.9437
+    },
+    "relevance": {
+      "passages": 240,
+      "yesWhenPassageDoesNot": 0.2544,
+      "yesWhenPassageHoldsAnswer": 0.9437
+    }
+  },
+  "perGroup": 80,
+  "pipelines": [
+    {
+      "answerable": 80,
+      "answerableDeclined": 0.0375,
+      "exactMatch": 0.45,
+      "f1": 0.6064,
+      "pipeline": "no graders",
+      "unanswerable": 80,
+      "unanswerableDeclined": 0.1625
+    },
+    {
+      "answerable": 80,
+      "answerableDeclined": 0.5375,
+      "exactMatch": 0.175,
+      "f1": 0.2619,
+      "pipeline": "+ hallucination check",
+      "unanswerable": 80,
+      "unanswerableDeclined": 0.6
+    },
+    {
+      "answerable": 80,
+      "answerableDeclined": 0.1,
+      "exactMatch": 0.5,
+      "f1": 0.6282,
+      "pipeline": "relevance grader (course)",
+      "unanswerable": 80,
+      "unanswerableDeclined": 0.55
+    },
+    {
+      "answerable": 80,
+      "answerableDeclined": 0.125,
+      "exactMatch": 0.475,
+      "f1": 0.6143,
+      "pipeline": "answer grader",
+      "unanswerable": 80,
+      "unanswerableDeclined": 0.5
+    },
+    {
+      "answerable": 80,
+      "answerableDeclined": 0.4,
+      "exactMatch": 0.3,
+      "f1": 0.4116,
+      "pipeline": "answer grader + hallucination check",
+      "unanswerable": 80,
+      "unanswerableDeclined": 0.65
+    },
+    {
+      "answerable": 80,
+      "answerableDeclined": 0.05,
+      "exactMatch": 0.45,
+      "f1": 0.6064,
+      "pipeline": "similarity gate (shipped)",
+      "unanswerable": 80,
+      "unanswerableDeclined": 0.2375
+    },
+    {
+      "answerable": 80,
+      "answerableDeclined": 0.1125,
+      "exactMatch": 0.5,
+      "f1": 0.6282,
+      "pipeline": "gate + relevance grader",
+      "unanswerable": 80,
+      "unanswerableDeclined": 0.5875
+    }
+  ]
+}

@@ -103,6 +103,8 @@ h1 em{font-style:normal;color:var(--violet)}
 .passage .src{font-size:14px;color:var(--faint)}
 .passage .src b{color:var(--soft);font-weight:600}
 .passage .gold{font:600 12.5px var(--sans);color:var(--lamp-ink)}
+.passage .aside{font:600 12.5px var(--sans);color:var(--faint)}
+.passage.set-aside .clip{opacity:.62}
 .passage .clip{font-size:15.5px;line-height:1.6;max-height:6.4em;overflow:hidden;position:relative;margin:0}
 .passage.full .clip{max-height:none}
 .passage .clip mark{background:var(--hi);color:var(--hi-ink);padding:0 2px;border-radius:2px}
@@ -119,6 +121,8 @@ h1 em{font-style:normal;color:var(--violet)}
 .entry .co b{display:block;font:800 34px/1 var(--display);color:var(--lamp);letter-spacing:0;margin-bottom:6px}
 .entry h3{font:700 22px/1.25 var(--sans);margin:0 0 14px}
 .split{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:32px;align-items:start}
+.split + .split{margin-top:30px}
+.entry .lead{margin:0 0 20px;color:var(--soft);max-width:70ch}
 .split p{margin:0 0 12px;color:var(--soft);text-wrap:pretty}
 .legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13.5px;color:var(--soft);margin-bottom:6px}
 .legend span{display:inline-flex;align-items:center;gap:6px}
@@ -262,7 +266,23 @@ footer b{color:var(--ink)}
     </div>
 
     <div class="entry">
-      <div class="co"><b>05</b>Limits</div>
+      <div class="co"><b>05</b>From the course</div>
+      <div>
+        <h3>A model that grades its own passages helps; one that grades its own answers doesn't</h3>
+        <p class="lead" id="courseIntro"></p>
+        <div class="split">
+          <div class="tablewrap"><table id="graderTable"></table></div>
+          <div><p id="graderText"></p></div>
+        </div>
+        <div class="split">
+          <div class="tablewrap"><table id="translateTable"></table></div>
+          <div><p id="translateText"></p></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="co"><b>06</b>Limits</div>
       <div>
         <h3>Where it still goes wrong</h3>
         <div class="limits" id="limits"></div>
@@ -274,7 +294,7 @@ footer b{color:var(--ink)}
     </div>
 
     <div class="entry">
-      <div class="co"><b>06</b>Running it</div>
+      <div class="co"><b>07</b>Running it</div>
       <div>
         <h3>Three containers</h3>
         <p style="margin:0;color:var(--soft)">Postgres with pgvector, Ollama with the two models, and the Go API. The API serves this page with a live question box.</p>
@@ -300,6 +320,8 @@ const EXAMPLES = {{EXAMPLES}};
 const INGEST = {{INGEST}};
 const CHOSEN = {{CHOSEN}};
 const GATE = {{GATE}};
+const GRADERS = {{GRADERS}};
+const TRANSLATE = {{TRANSLATE}};
 const $ = id => document.getElementById(id);
 const pct = (v, d = 0) => (v * 100).toFixed(d) + "%";
 const fmt = n => n.toLocaleString("en-US");
@@ -361,7 +383,7 @@ function render(ex, where, live){
   else if (rag.abstained) ruling = `Gold answer: <b>${esc(golds[0])}</b>. The model said it didn't know${rag.retrieved ? " even though a passage held the answer" : "; no passage held the answer"}.`;
   else ruling = `Gold answer: <b>${esc(golds[0])}</b>. ${rag.f1 > 0 ? `Partly right (F1 ${rag.f1.toFixed(2)})` : "Wrong"}${rag.retrieved ? "" : "; no passage held the answer"}.`;
   const n = (rag.sources || []).length;
-  const passages = (rag.sources || []).map((s, i) => `<div class="passage"><div class="ph"><span class="n">Passage ${i + 1}</span><span class="src">from <b>${esc(s.title)}</b></span>${s.gold ? `<span class="gold">holds the answer</span>` : ""}</div><p class="clip">${marked(s.text, s.gold ? golds : [])}</p>${s.text.length > 300 ? `<button type="button" class="more">Show the whole passage</button>` : ""}</div>`).join("");
+  const passages = (rag.sources || []).map((s, i) => `<div class="passage${s.kept === false ? " set-aside" : ""}"><div class="ph"><span class="n">Passage ${i + 1}</span><span class="src">from <b>${esc(s.title)}</b></span>${s.gold ? `<span class="gold">holds the answer</span>` : ""}${s.kept === false ? `<span class="aside">set aside by the relevance grader</span>` : ""}</div><p class="clip">${marked(s.text, s.gold ? golds : [])}</p>${s.text.length > 300 ? `<button type="button" class="more">Show the whole passage</button>` : ""}</div>`).join("");
   $("screen").innerHTML = `<p class="proj"><span>${where}</span><b>${live ? "live" : ex.doc ? esc(ex.doc) : ""}</b></p><h2>${esc(ex.question)}</h2><div class="answers${live ? " solo" : ""}">${live ? "" : block(closed, "From memory, no passages", "mem", false)}${block(rag, `After reading ${n} passages`, "with", true)}</div><p class="ruling">${ruling}</p><div class="passages">${passages}</div>`;
   $("screen").querySelectorAll(".more").forEach(b => b.addEventListener("click", () => { b.parentElement.classList.add("full"); b.remove(); }));
 }
@@ -406,7 +428,7 @@ function render(ex, where, live){
       const res = await r.json();
       if (!r.ok) throw new Error(res.error || r.statusText);
       $("grid").querySelectorAll(".frame").forEach(x => x.setAttribute("aria-pressed", "false"));
-      render({ question: q, impossible: false, gold: [], ms: res.ms, closed: {}, rag: { answer: res.answer, abstained: res.abstained, cited: res.cited, sources: (res.sources || []).map(s => ({ title: s.title, text: s.text, gold: false })) } }, "Your question", true);
+      render({ question: q, impossible: false, gold: [], ms: res.ms, closed: {}, rag: { answer: res.answer, abstained: res.abstained, cited: res.cited, sources: (res.sources || []).map(s => ({ title: s.title, text: s.text, gold: false, kept: s.kept })) } }, "Your question", true);
       $("liveStatus").textContent = "Answered by the Footnote server this page came from.";
     } catch (e) {
       $("liveStatus").textContent = "The server couldn't answer: " + e.message;
@@ -484,11 +506,43 @@ const methods = [["lexical", "var(--c-lex)", "word search", "square"], ["dense",
   $("gateText").textContent = `The fix tried here: if even the best passage is a weak match for the question, skip the model and say "I don't know". The thresholds were set on the tuning articles, and the table shows what each does to the same test answers. The best passage's similarity tells answerable and unanswerable questions apart only a little better than chance (${pct(GATE.auc.test)} of pairs ordered correctly, where 50% is a coin flip), because SQuAD's unanswerable questions were written about the same paragraphs. The balanced threshold declines ${pct(bal.unanswerableDeclined, 1)} of unanswerable questions but drops exact match to ${pct(bal.exactMatch, 1)}. The server uses the mildest one: ${pct(shipped.unanswerableDeclined, 1)} declined instead of ${pct(none.unanswerableDeclined, 1)}, for ${((none.exactMatch - shipped.exactMatch) * 100).toFixed(1)} points of exact match.`;
 })();
 
-/* 05: limits */
+/* The rewrites' verdict, from the numbers. */
+function TRANSLATE_TEXT(M, n) {
+  const q = M.question, hy = M.hyde, sb = M["step-back"], mq = M["multi-query"], rf = M["rag-fusion+question"];
+  const diff = (a, b) => Math.round((a - b) * n);
+  return `${n} answerable test questions. Each method asks the model to rewrite the question, searches with the rewrites, and merges the results the way the course does: multi-query keeps each passage's best match, RAG-Fusion and step-back use reciprocal-rank fusion, and HyDE searches with a passage the model writes as if answering. None beat plain search by more than a question or two. Step-back put the right passage first for ${diff(sb.recall["1"], q.recall["1"]) >= 0 ? diff(sb.recall["1"], q.recall["1"]) + " more" : -diff(sb.recall["1"], q.recall["1"]) + " fewer"} of ${n}, within noise. Multi-query (${pct(mq.recall["1"])} first) and RAG-Fusion (${pct(rf.recall["1"])} with the question kept) cost about ${mq.llmSeconds.toFixed(0)} s of model time each. HyDE did worst (${pct(hy.recall["1"])}): a 1.5B model's made-up answer passages drift from the facts, which pulls search toward the wrong paragraph. SQuAD's questions are already worded close to the text, which leaves rewriting little to fix, so the server keeps plain search.`;
+}
+
+/* 05: techniques from "Learn RAG From Scratch" */
+(function course(){
+  const G = Object.fromEntries(GRADERS.pipelines.map(p => [p.pipeline, p]));
+  const names = [
+    ["no graders", "Plain retrieval, no checks"],
+    ["similarity gate (shipped)", "Similarity gate (before)"],
+    ["relevance grader (course)", "Relevance grader (course)"],
+    ["gate + relevance grader", "Gate + relevance grader (now shipped)"],
+    ["answer grader", "Stricter “does it answer?” grader"],
+    ["+ hallucination check", "Hallucination check"],
+    ["answer grader + hallucination check", "Stricter grader + hallucination check"],
+  ];
+  const now = G["gate + relevance grader"], gate = G["similarity gate (shipped)"], none = G["no graders"], hall = G["+ hallucination check"];
+  $("courseIntro").textContent = `Lance Martin's freeCodeCamp course Learn RAG From Scratch builds its techniques with LangChain and GPT-3.5. They were rebuilt here without LangChain and run on the same 1.5B model and the same test articles: model-written rewrites of the question before search, and yes/no "graders" that let the model check its passages and its answer.`;
+  $("graderTable").innerHTML = `<thead><tr><th scope="col">Pipeline</th><th scope="col">Exact match</th><th scope="col">Declines answerable</th><th scope="col">Declines unanswerable</th></tr></thead><tbody>${names.map(([k, label]) => { const r = G[k]; return `<tr class="${k === "gate + relevance grader" ? "chosen" : ""}"><td>${label}</td><td>${pct(r.exactMatch, 1)}</td><td>${pct(r.answerableDeclined, 1)}</td><td>${pct(r.unanswerableDeclined, 1)}</td></tr>`; }).join("")}</tbody>`;
+  const ag = GRADERS.graderAgreement.relevance;
+  $("graderText").textContent = `${GRADERS.perGroup} answerable and ${GRADERS.perGroup} unanswerable test questions. The course's relevance grader asks the model, passage by passage, whether it's on topic, and the model answers from the passages it keeps. It said yes to ${pct(ag.yesWhenPassageHoldsAnswer)} of passages holding the answer and ${pct(ag.yesWhenPassageDoesNot)} of the rest. Added after the similarity gate, it took unanswerable declines from ${pct(gate.unanswerableDeclined)} to ${pct(now.unanswerableDeclined)} and exact match from ${pct(gate.exactMatch)} to ${pct(now.exactMatch)}, for ${Math.round((now.answerableDeclined - gate.answerableDeclined) * 100)} more points of answerable questions declined, so the server now runs it. The hallucination check, which asks whether the answer is supported by the passages, rejected so many good answers that exact match fell from ${pct(none.exactMatch)} to ${pct(hall.exactMatch)}. At this size, judging an answer is harder for the model than judging a passage. With ${GRADERS.perGroup} questions per group, differences under about 10 points are within noise.`;
+  if (!TRANSLATE || !TRANSLATE.methods) return;
+  const M = TRANSLATE.methods;
+  const tnames = [["question", "The question as asked (shipped)"], ["multi-query", "Multi-query (5 rewrites)"], ["rag-fusion", "RAG-Fusion (4 queries, RRF)"], ["rag-fusion+question", "RAG-Fusion + the question"], ["step-back", "Step-back + the question"], ["hyde", "HyDE (a written answer)"], ["hyde-as-document", "HyDE, embedded as a passage"]];
+  const shippedSearch = "question"; // the server keeps plain search
+  $("translateTable").innerHTML = `<thead><tr><th scope="col">Search with</th><th scope="col">Top 1</th><th scope="col">Top 3</th><th scope="col">MRR</th><th scope="col">Model time</th></tr></thead><tbody>${tnames.map(([k, label]) => { const r = M[k]; return `<tr class="${k === shippedSearch ? "chosen" : ""}"><td>${label}</td><td>${pct(r.recall["1"], 1)}</td><td>${pct(r.recall["3"], 1)}</td><td>${r.mrr.toFixed(3)}</td><td>${k === "question" ? "–" : "+" + r.llmSeconds.toFixed(1) + " s"}</td></tr>`; }).join("")}</tbody>`;
+  $("translateText").textContent = TRANSLATE_TEXT(M, TRANSLATE.questions);
+})();
+
+/* 06: limits */
 (function limits(){
   const s = ANSWERS.summary, ru = s["rag/unanswerable"], ra = s["rag/answerable"];
   const items = [
-    ["Questions with no answer", `Half of SQuAD 2.0's questions were written to look answerable from the article when they aren't. After reading the passages, the model still answered ${pct(1 - ru.abstained)} of them, and the gate only brings that down to ${pct(1 - shipped.unanswerableDeclined)}. A 1.5-billion-parameter model is a weak judge of "the text doesn't say".`],
+    ["Questions with no answer", `Half of SQuAD 2.0's questions were written to look answerable from the article when they aren't. After reading the passages, the model still answered ${pct(1 - ru.abstained)} of them. The gate and the relevance grader together bring that down to about ${pct(1 - GRADERS.pipelines.find(p => p.pipeline === "gate + relevance grader").unanswerableDeclined)}, but a 1.5-billion-parameter model is still a weak judge of "the text doesn't say".`],
     ["Answers in other words", `Exact match is strict: "the Normans" and "Normans" count, but "in the 10th century" against "10th century" doesn't. Word-overlap F1 (${pct(ra.f1)}) gives partial credit, and the frames above show the real answers.`],
     ["Not your notes yet", `The documents are Wikipedia articles from SQuAD, because their questions come with known answers. Pointing Footnote at your own files means swapping the loader. The search, the database and the server stay the same.`],
   ];

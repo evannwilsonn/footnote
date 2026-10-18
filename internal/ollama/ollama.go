@@ -87,6 +87,11 @@ type ChatResult struct {
 
 // Chat runs one deterministic (temperature 0) completion.
 func (c *Client) Chat(ctx context.Context, messages []Message, maxTokens int) (ChatResult, error) {
+	return c.ChatFormat(ctx, messages, maxTokens, nil)
+}
+
+// ChatFormat is Chat with Ollama's structured output: format is a JSON schema the reply must match.
+func (c *Client) ChatFormat(ctx context.Context, messages []Message, maxTokens int, format any) (ChatResult, error) {
 	var out struct {
 		Message         Message `json:"message"`
 		PromptEvalCount int     `json:"prompt_eval_count"`
@@ -98,6 +103,9 @@ func (c *Client) Chat(ctx context.Context, messages []Message, maxTokens int) (C
 		"messages": messages,
 		"stream":   false,
 		"options":  map[string]any{"temperature": 0, "seed": 1, "num_predict": maxTokens, "num_ctx": 4096},
+	}
+	if format != nil {
+		in["format"] = format
 	}
 	if err := c.post(ctx, "/api/chat", in, &out); err != nil {
 		return ChatResult{}, err
