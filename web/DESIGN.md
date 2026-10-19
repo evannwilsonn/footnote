@@ -1,48 +1,40 @@
 # Design notes
 
-The page is a microfiche reader. A question-answering system that cites its sources works like someone at a library reader: pick a frame off the fiche, project it, and read the passage it points to. So the example questions sit on a fiche card as a grid of frames with coordinates (A1 to C4), and choosing one projects it onto the reader screen beside it, with the retrieved passages underneath, numbered the way the model cites them.
+The page is a page of a scholarly book lying on a dark desk, the same composition as the project's thumbnail. A question-answering system that cites its sources works like a footnoted text: a question, an answer, and a small superscript number that sends you to the exhibit at the foot of the page. So each example is set as a Q. and an A., the answer is run over with a yellow highlighter and carries the number of the passage it cites, and the retrieved passages sit below a short footnote rule, numbered the way the model cites them: the cited one in roman, the others in italic and faded.
 
 ## Layout
 
-- **Nameplate:** the wordmark, the stack, the source link, and a lamp switch for light and dark.
-- **Opening:** the headline ("Every answer, with its frame number.") and a short lede, then a dark header strip in the style of a fiche title band: source, article and paragraph counts, the search method and how many passages the model reads.
-- **The reader:** the fiche is on the left. It is a dark film card with a 4 × 3 grid of frames, each showing its coordinate, a status mark (✓ answered from the passages, – correctly declined, ✗ wrong) and the question. The reader screen is on the right, a pale projection with registration corners. It shows the question, the answer from memory beside the answer after reading, a one-line ruling against the gold answer, and the passages, with the gold answer highlighted in the one that holds it. When the page is served by `footnote serve`, a live question box appears at the top of the fiche and answers project onto the same screen. On GitHub Pages it stays hidden, because there's no server to answer.
-- **Findings:** one long panel indexed 01 to 06 in a left column:
-  - 01: retrieval, as a chart
-  - 02: chunk size, as a table
-  - 03: answering, as paired bars, from memory vs after reading
-  - 04: the similarity gate
-  - 05: limits
-  - 06: running it
+- **The desk and the page:** a cream page column (max 960px) on a dark desk, with a faint binding shadow down its left edge.
+- **Running head:** the wordmark and stack in italic, the source link, and a lamp switch for light and dark.
+- **Title:** "Footnote" in bold, an italic subtitle, a short rule, the lede, then a colophon line between hairlines: source, article and paragraph counts, the search method and how many passages the model reads.
+- **Margin figures:** the two headline numbers (right passage found first; exact answers with and without the documents) are computed from the results. On a desk 1260px or wider they sit in the dark margins beside the page, in big serif figures; narrower, they sit on the page under the colophon.
+- **The reader:** the index of test questions is on the left, one ruled entry per question, each with its coordinate (A1 to C4), a status mark (✓ answered from the passages, – correctly declined, ✗ wrong) and the question. The chosen one is highlighted. The question and answers are on the right: the answer from memory (struck through when wrong), then the answer after reading, highlighted, with its superscript citation, a one-line ruling against the gold answer, and the passages as footnotes, with the gold answer highlighted in the one that holds it. When the page is served by `footnote serve`, a live question box appears above the index and answers set on the same page. On GitHub Pages it stays hidden, because there's no server to answer.
+- **Findings:** numbered sections (§ 01 to § 07) with the number and a short label in a left column; tables use book rules (heavier top and bottom, hairlines between rows) and the shipped row is highlighted.
 
-Below 980px the fiche moves above the screen and the findings index goes inline. Below 560px the fiche becomes two columns and drops its axis labels, since each frame carries its own coordinate.
+Below 980px the index moves above the answer, as two columns, and the section numbers go inline. Below 560px the index is a single column.
 
 ## Color
 
-Diazo fiche prints violet on clear film, so violet is the ink and the projection lamp gives the amber accent.
-
-| Token | Light | Dark |
+| Token | Light (page on the desk) | Dark (lamp on) |
 |---|---|---|
-| Housing (page) | `#d8d5e2` | `#0e0c17` |
-| Screen (panels) | `#f7f5fc` | `#1b1830` |
-| Ink | `#1d1838` | `#ece9ff` |
-| Violet (headings, links) | `#3d2a9e` | `#b7a8ff` |
-| Lamp (accent) | `#e08a1e` | `#f2a54a` |
-| Film (fiche, code) | `#1d1934` | `#07060e` |
-| Answer highlight | `#ffe2a8` | `#5b3f0b` |
+| Desk | `#2c2a27` | `#131210` |
+| Page | `#fbf8f0` | `#22201c` |
+| Ink | `#26221c` | `#ece4d2` |
+| Soft text | `#4a443a` | `#cec5b2` |
+| Faint text | `#6b6458` | `#a89f8b` |
+| Highlighter | `#f6e27a` | `#f6e27a` |
+| Selected row | `#f6e27a` | `#3b3524` with a highlighter edge |
 
-Dark mode is its own set of values rather than an inversion. Chart series were checked with the dataviz palette validator against each mode's screen colour:
+Dark mode turns the page dark and the type warm and light. The highlighter keeps its colour, with dark ink on it, but is used only on the answer and the gold span in a passage; selected rows get a dim ochre instead.
 
 | Series | Light | Dark |
 |---|---|---|
-| word search (lexical) | `#b0600c` | `#cf7f2a` |
-| meaning search (dense) | `#5a3ccf` | `#9077ee` |
-| both, fused (hybrid) | `#007c99` | `#1fa6b4` |
+| word search (lexical) | `#a8590b` | `#e0a050` |
+| meaning search (dense) | `#41398f` | `#aaa3f0` |
+| both, fused (hybrid) | `#1d6e68` | `#5cc0b4` |
 
-Each series also has its own marker shape (square, circle, diamond), shown in the legend and labelled at the line ends, so colour is never the only cue. The status marks on the frames use symbols and screen-reader text as well as colour.
+Each series also has its own marker shape (square, circle, diamond), shown in the legend and labelled at the line ends, so colour is never the only cue. The status marks use symbols and screen-reader text as well as colour.
 
 ## Type
 
-- **Syne (800):** the wordmark, headline and section numbers. It is wide and mechanical, like the stencilled lettering on reader hardware.
-- **Figtree:** running text and the projected questions.
-- **Martian Mono:** coordinates, labels and the header strip.
+Crimson Pro throughout, self-hosted from `docs/fonts` (SIL OFL 1.1, licence alongside): bold for the title, headings and the answer, italic for the subtitle, labels and uncited footnotes, regular for running text. `footnote serve` serves `/fonts/` from the same folder.

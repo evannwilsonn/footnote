@@ -633,6 +633,8 @@ func serve(args []string) error {
 		}
 		json.NewEncoder(w).Encode(res)
 	})
+	// The page's self-hosted typeface (Crimson Pro, SIL OFL), from docs/fonts like on GitHub Pages.
+	mux.Handle("GET /fonts/", http.FileServer(http.Dir("docs")))
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
